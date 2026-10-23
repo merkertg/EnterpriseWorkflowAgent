@@ -1,0 +1,113 @@
+{
+  "project": "enterprise-workflow-agent",
+  "stage": "03",
+  "implemented_stages": ["01", "02", "03"],
+  "status": "implemented_locally_verified",
+  "verified_on": "2026-10-23",
+  "timezone": "Asia/Tashkent",
+  "git": {
+    "base_commit": "d83a9b0",
+    "scope": "uncommitted_working_tree",
+    "committed": false,
+    "pushed": false
+  },
+  "environment": {
+    "platform": "macOS ARM64",
+    "python": "3.12.15",
+    "uv": "0.12.23",
+    "fastapi": "0.143.0",
+    "starlette": "1.7.0",
+    "pydantic": "2.14.0",
+    "pydantic_settings": "2.15.0",
+    "uvicorn": "0.54.0",
+    "sqlalchemy": "2.1.4",
+    "alembic": "1.20.0",
+    "psycopg": "3.3.6",
+    "pytest": "9.1.1",
+    "ruff": "0.16.10",
+    "mypy": "2.4.0",
+    "httpx2": "2.13.1",
+    "postgresql": "18.3 (Homebrew, temporary cluster on 127.0.0.1:55433)"
+  },
+  "checks": [
+    {"command": "uv lock --check --offline", "status": "passed"},
+    {"command": "uv sync --locked --offline", "status": "passed"},
+    {"command": "uv run --locked ruff check .", "status": "passed"},
+    {"command": "uv run --locked ruff format --check .", "status": "passed", "files": 74},
+    {"command": "uv run --locked mypy app tests scripts migrations", "status": "passed", "source_files": 54},
+    {"command": "uv run --locked pytest", "database": "none", "status": "passed", "passed": 176, "failed": 0, "skipped": 36},
+    {"command": "REQUIRE_TEST_DATABASE=1 TEST_DATABASE_URL=... uv run --locked pytest", "database": "enterprise_workflow_test", "status": "passed", "passed": 212, "failed": 0, "skipped": 0},
+    {"command": "uv run --locked pytest -m postgres", "database": "enterprise_workflow_test", "status": "passed", "passed": 36, "deselected": 176},
+    {"command": "uv run --locked alembic upgrade head", "status": "passed", "revision": "0001"},
+    {"command": "uv run --locked alembic downgrade base && uv run --locked alembic upgrade head", "status": "passed"},
+    {"command": "uv run --locked alembic check", "status": "passed", "output": "No new upgrade operations detected."},
+    {"command": "uv run --locked alembic upgrade head --sql", "status": "passed", "create_table_statements": 10},
+    {"command": "uv run --locked python -m app.demo", "status": "passed", "scenarios": 3},
+    {"command": "uv run --locked python -m app.persistence_demo", "status": "passed", "steps": 7},
+    {"command": "uv run --locked python scripts/check_docs.py", "status": "passed", "links": 125, "files": 20, "scope": "local_inline_markdown_target_files_only"},
+    {"command": "git diff --check plus trailing-whitespace scan", "status": "passed"}
+  ],
+  "concurrency": {
+    "race_found": "duplicate committed between key lookup and workflow read returned version_conflict",
+    "failures_before_fix": "8 of 10 runs",
+    "deterministic_regression_test": "fails_without_fix_passes_with_fix",
+    "repeated_runs_after_fix": {"test_concurrency": 30, "test_concurrency_and_versions": 15, "failures": 0}
+  },
+  "restart_check": {
+    "status": "passed",
+    "method": "pg_ctl stop -m fast, pg_ctl start, persistence_demo show in a new process",
+    "workflow_id": "DEMO-WF-7893b40c0330",
+    "stored_state_identical": true
+  },
+  "http_smoke": {
+    "status": "passed",
+    "checked_stage": "01",
+    "repeated_in_stages_02_03": false,
+    "transport": "real_uvicorn_loopback_http",
+    "host": "127.0.0.1",
+    "port": 8003,
+    "endpoints": {
+      "/health": 200,
+      "/docs": 200,
+      "/redoc": 200,
+      "/openapi.json": 200
+    },
+    "server_stopped_after_check": true
+  },
+  "remote_ci": {
+    "status": "not_verified",
+    "run_url": null,
+    "configured": ["postgres:18.3 service pinned by digest", "alembic upgrade head", "alembic check", "REQUIRE_TEST_DATABASE=1"]
+  },
+  "real_llm": {"status": "not_implemented"},
+  "document_processing": {"status": "not_implemented"},
+  "domain": {
+    "status": "implemented_locally_verified",
+    "runtime_dependencies": "python_standard_library_only",
+    "rule_issue_codes": 7,
+    "currencies": ["USD", "EUR", "UZS"],
+    "line_rounding": "ROUND_HALF_UP",
+    "decimal_places": 2,
+    "content_hash": "sha256_of_canonical_json"
+  },
+  "database": {
+    "status": "implemented_locally_verified",
+    "engine": "postgresql",
+    "migrations": ["0001"],
+    "tables": 9,
+    "money_column": "NUMERIC(14,2)",
+    "quantity_column": "NUMERIC(12,6)",
+    "append_only_tables": 8,
+    "transactional_audit": true,
+    "optimistic_locking": true,
+    "idempotency_keys": true,
+    "immutable_input_versions": ["invoice", "purchase_order", "validation_policy"],
+    "test_database_guard": "name_must_end_with__test",
+    "new_tests_without_database": 34,
+    "new_tests_with_database": 36,
+    "stale_version_detection": "planned_stage_05_06"
+  },
+  "human_approvals": {"status": "service_command_without_authentication", "authenticated_identity": false, "http_api": "not_implemented"},
+  "pdf_guides": {"status": "planned"},
+  "next_stage": "04"
+}

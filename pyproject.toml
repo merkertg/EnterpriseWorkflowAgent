@@ -1,0 +1,47 @@
+[project]
+name = "enterprise-workflow-agent"
+version = "0.1.0"
+description = "A staged learning project for document checks and human approvals"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "alembic>=1.20,<2",
+    "fastapi>=0.142.2,<1",
+    "psycopg[binary]>=3.3,<4",
+    "pydantic>=2.12,<3",
+    "pydantic-settings>=2.15,<3",
+    "sqlalchemy>=2.1.4,<2.2",
+    "uvicorn>=0.54,<1",
+]
+
+[dependency-groups]
+dev = [
+    # Current Starlette TestClient uses HTTPX2.
+    "httpx2>=2.13.1,<3",
+    "mypy>=2.4,<3",
+    "pytest>=9.1,<10",
+    "ruff>=0.16.10,<0.17",
+]
+
+[tool.uv]
+# Resolve releases at least two weeks old at this project's start date.
+exclude-newer = "2026-10-09T00:00:00Z"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "--strict-markers"
+markers = [
+    "postgres: needs TEST_DATABASE_URL pointing to a disposable database ending in _test",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+strict = true
+plugins = ["pydantic.mypy"]

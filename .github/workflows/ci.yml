@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, types, tests and documentation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      # Disposable database for integration tests; the name must end in _test.
+      postgres:
+        image: postgres:18.3@sha256:7e32e9833a6fb1c92c32552794cb6ed569d51b445a54907d35fc112ef39684db
+        env:
+          POSTGRES_USER: enterprise_workflow
+          # Throwaway CI-only service password; it protects no real data.
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: enterprise_workflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U enterprise_workflow -d enterprise_workflow_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://enterprise_workflow:ci-only-password@127.0.0.1:5432/enterprise_workflow_test
+      # Fail instead of skipping if the database configuration is lost.
+      REQUIRE_TEST_DATABASE: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.23"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install locked dependencies
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run --locked ruff check .
+
+      - name: Check formatting
+        run: uv run --locked ruff format --check .
+
+      - name: Check types
+        run: uv run --locked mypy app tests scripts migrations
+
+      - name: Apply migrations to the test database
+        run: uv run --locked alembic upgrade head
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+
+      - name: Check models match migrations
+        run: uv run --locked alembic check
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+
+      - name: Run tests
+        run: uv run --locked pytest
+
+      - name: Check documentation links
+        run: uv run --locked python scripts/check_docs.py

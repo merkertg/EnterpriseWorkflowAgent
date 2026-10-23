@@ -1,0 +1,19 @@
+# Local environments, caches and generated reports.
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+reports/
+.uv-cache/
+
+# Local configuration and documents must stay outside Git.
+.env
+.env.*
+!.env.example
+data/private/
+var/
+.DS_Store
