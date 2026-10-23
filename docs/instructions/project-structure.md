@@ -40,6 +40,8 @@ Keep the initial application small and add a layer when it owns real behavior.
 | `alembic.ini`, `migrations/` | Alembic configuration, environment and revisions |
 | `tests/` | Automated checks; `tests/persistence/` needs `TEST_DATABASE_URL` |
 | `scripts/check_docs.py` | Local Markdown link validation |
+| `scripts/build_guide.py`, `scripts/guide/` | Bilingual PDF guide generator (ReportLab, `guide` dependency group) |
+| `docs/guide/*.pdf` | Russian and English PDF guides with an embedded source fingerprint |
 | `.github/workflows/ci.yml` | Automated check configuration |
 | `pyproject.toml`, `uv.lock` | Dependencies, tooling and reproducible resolution |
 | `.python-version` | Python 3.12 interpreter selection |
@@ -65,7 +67,7 @@ from its own application instance.
 | `docs/CI_CD.md` | CI configuration and limits of remote verification |
 | `docs/VERIFICATION.md` | Recorded command outcomes and limitations |
 | `docs/guide/verification.json` | Machine-readable verification summary |
-| `docs/guide/README.md` | Status of the planned RU/EN PDF guides |
+| `docs/guide/README.md` | How the RU/EN PDF guides are built, checked and updated |
 
 ## Planned locations
 

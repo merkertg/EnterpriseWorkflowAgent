@@ -31,11 +31,11 @@
 | `uv lock --check --offline` | Успешно |
 | `uv sync --locked --offline` | Успешно |
 | `uv run --locked ruff check .` | Успешно: замечаний нет |
-| `uv run --locked ruff format --check .` | Успешно: 98 файлов отформатированы |
-| `uv run --locked mypy app tests scripts migrations` | Успешно: ошибок в 75 исходных файлах нет |
-| `uv run --locked pytest` без `TEST_DATABASE_URL` | **244 passed, 52 skipped**: тесты PostgreSQL не выполнялись |
-| `REQUIRE_TEST_DATABASE=1 TEST_DATABASE_URL=… uv run --locked pytest` | **296 passed**, без пропусков |
-| то же с `-m postgres` | **52 passed**, 244 deselected |
+| `uv run --locked ruff format --check .` | Успешно: 111 файлов отформатированы |
+| `uv run --locked mypy app tests scripts migrations` | Успешно: ошибок в 88 исходных файлах нет, включая генератор PDF |
+| `uv run --locked pytest` без `TEST_DATABASE_URL` | **248 passed, 52 skipped**: тесты PostgreSQL не выполнялись |
+| `REQUIRE_TEST_DATABASE=1 TEST_DATABASE_URL=… uv run --locked pytest` | **300 passed**, без пропусков |
+| то же с `-m postgres` | **52 passed**, 248 deselected |
 | `uv run --locked alembic upgrade head` | Успешно: применена ревизия `0002` |
 | `uv run --locked alembic downgrade 0001`, затем `upgrade head` | Успешно |
 | `uv run --locked alembic current` | `0002 (head)` |
@@ -44,7 +44,7 @@
 | `uv run --locked python -m app.documents_cli demo` (дважды) | Успешно; во втором запуске все 4 документа повторно использованы, процесс — `awaiting_approval` |
 | `uv run --locked python -m app.persistence_demo` | Успешно: сценарий этапа 03 не изменился |
 | `uv run --locked python -m app.demo` | Успешно: сценарий этапа 02 не изменился |
-| `uv run --locked python scripts/check_docs.py` | Успешно: 152 локальные ссылки в 23 Markdown-файлах |
+| `uv run --locked python scripts/check_docs.py` | Успешно: 157 локальных ссылок в 23 Markdown-файлах |
 | `git diff --check` и поиск пробелов в конце строк | Успешно |
 
 Каждый полный прогон `pytest` с базой заново удаляет и создаёт схему через
@@ -53,7 +53,7 @@
 
 ## Тесты этапа 04
 
-Добавлено 84 теста; 212 тестов этапов 01–03 сохраняются и проходят.
+Этап 04 добавил 84 теста; 212 тестов этапов 01–03 сохраняются и проходят. Ещё 4 теста проверяют PDF-руководства (раздел ниже); всего 300.
 
 Без базы данных (68):
 
@@ -101,6 +101,20 @@
 Повторяемость: 15 повторных запусков `tests/persistence/test_documents.py`
 вместе с `test_concurrency.py` — все по 14 тестов без ошибок.
 
+## PDF-руководства
+
+| Проверка | Результат |
+| --- | --- |
+| `uv run --locked --group guide python scripts/build_guide.py` | Успешно: обе версии собраны, ReportLab 4.4.9 из группы `guide` |
+| `pdfinfo` | По 22 страницы в русской и английской версиях |
+| `pdftoppm -r 62` и `-r 70`, просмотр | Все 44 страницы просмотрены; найденные дефекты исправлены, после пересборки повторно просмотрены |
+| `uv run --locked pytest tests/test_guide_pdfs.py` | 4 passed: отпечаток исходников совпадает, все 21 раздел на месте, в английской версии нет кириллицы |
+| Временная правка `app/domain/money.py` | Тест свежести падает с подсказкой пересборки; после возврата файла проходит |
+
+Шрифты — системные PT Sans и PT Mono macOS. Сборка на Linux с DejaVu Sans
+не проверялась. Визуальная проверка выполнялась по изображениям страниц
+при 62–70 точках на дюйм; печать на бумаге не проверялась.
+
 ## Результаты этапа 03, которые остаются в силе
 
 Гонка «ключ не найден → дубликат зафиксирован → прочитана версия 2»,
@@ -130,7 +144,7 @@ smoke-тест не повторялся; ответы API проверяютс�
   по-прежнему заявляются вызывающим кодом.
 - Новая версия заказа или политики не помечает закреплённый результат
   устаревшим — этапы 05 и 06.
-- Реальная LLM и корпоративные системы не вызывались. PDF-руководства
-  проекта пока не создавались.
+- Реальная LLM и корпоративные системы не вызывались.
+- PDF-руководства проверены визуально только для сборки на macOS.
 
 Машиночитаемая версия: [guide/verification.json](guide/verification.json).

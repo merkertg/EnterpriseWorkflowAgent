@@ -27,6 +27,10 @@ checks rules and controls state transitions. The AI assistant proposes fields an
 explanations; authorized employees make approval decisions. The tutorial does not
 initiate payments or act on real corporate systems.
 
+**Visual guides:** [Russian PDF](docs/guide/enterprise-workflow-agent-guide.pdf)
+and [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf), 22 pages
+each, with diagrams for stages 01–04.
+
 **По-русски:** основа API — [этап 01](docs/STAGE_01.md), предметная модель,
 правила и состояния — [этап 02](docs/STAGE_02.md), хранение, транзакции и
 аудит — [этап 03](docs/STAGE_03.md), документы и происхождение полей —
@@ -165,6 +169,13 @@ uv run --locked pytest
 uv run --locked python scripts/check_docs.py
 ```
 
+Rebuild both PDF guides after changing code, migrations, `uv.lock` or
+`docs/guide/verification.json`; a test fails if they are stale:
+
+```bash
+uv run --locked --group guide python scripts/build_guide.py
+```
+
 Tests use temporary directories and in-process HTTP requests and never read a
 developer's `.env`. PostgreSQL integration tests run only when the process
 environment sets `TEST_DATABASE_URL` to a disposable database whose name ends in
@@ -183,5 +194,6 @@ not been verified.
 | Design and decisions (EN) | [Approach](docs/APPROACH.md), [ADR 0001](docs/adr/0001-modular-monolith-and-tooling.md), [ADR 0002](docs/adr/0002-domain-rules-and-workflow.md), [ADR 0003](docs/adr/0003-postgresql-persistence-audit-idempotency.md), [ADR 0004](docs/adr/0004-document-intake-and-field-provenance.md) |
 | CI explanation (RU) | [CI/CD](docs/CI_CD.md) |
 | Work completed and check evidence (RU) | [Development log](docs/DEVELOPMENT_LOG.md), [verification](docs/VERIFICATION.md) |
-| Machine-readable status and future PDF guides | [Verification JSON](docs/guide/verification.json), [guide policy](docs/guide/README.md) |
+| Visual PDF guides (RU and EN) | [Russian PDF](docs/guide/enterprise-workflow-agent-guide.pdf), [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf), [how they are built](docs/guide/README.md) |
+| Machine-readable status | [Verification JSON](docs/guide/verification.json) |
 | Contributor rules | [AGENTS.md](AGENTS.md) |

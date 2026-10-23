@@ -23,6 +23,10 @@ dev = [
     "pytest>=9.1,<10",
     "ruff>=0.16.10,<0.17",
 ]
+# PDF guide generator only; install with `uv run --locked --group guide ...`.
+guide = [
+    "reportlab==4.4.9",
+]
 
 [tool.uv]
 # Resolve releases at least two weeks old at this project's start date.
@@ -43,6 +47,23 @@ line-length = 88
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
+# Guide text modules hold paired Russian/English prose; splitting sentences
+# to 88 columns would hurt translation review. Code modules keep the limit.
+[tool.ruff.lint.per-file-ignores]
+"scripts/guide/stage*.py" = ["E501"]
+"scripts/guide/story.py" = ["E501"]
+"scripts/guide/diagrams.py" = ["E501"]
+
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]
+
+# ReportLab ships no typing metadata and is installed only with --group guide.
+[[tool.mypy.overrides]]
+module = ["reportlab", "reportlab.*"]
+ignore_missing_imports = true
+
+# Guide flowables subclass ReportLab classes, which mypy sees as Any.
+[[tool.mypy.overrides]]
+module = ["guide", "guide.*"]
+disallow_subclassing_any = false

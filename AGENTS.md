@@ -23,8 +23,12 @@
   [summary](docs/guide/verification.json).
 - Detailed guides for later stages are added when those stages are implemented.
   Future directories and unavailable files must not be presented as shipped.
-- PDF guides in Russian and English are planned. Once their generator exists,
-  rebuild and visually inspect both after changing their source material.
+- Keep the Russian and English PDF guides in `docs/guide/` current. After any
+  change to the generator, `verification.json`, `app/`, migrations or
+  `uv.lock`, rebuild both with
+  `uv run --locked --group guide python scripts/build_guide.py`, inspect every
+  page of both, and update their sections when a stage changes.
+  `tests/test_guide_pdfs.py` fails if a PDF is older than its sources.
 - Run Ruff, strict mypy, pytest and the local documentation link checker for
   relevant code changes. Tests must not depend on a developer's `.env`, network
   or external credentials. PostgreSQL integration tests read only

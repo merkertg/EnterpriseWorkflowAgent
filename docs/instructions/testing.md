@@ -76,6 +76,13 @@ from an extraction, tamper detection, concurrent uploads and the CLI in
 separate processes. PDF tests start short-lived Python subprocesses; no extra
 service is needed.
 
+`tests/test_guide_pdfs.py` checks both PDF guides with pypdf: the source
+fingerprint stored in each PDF must match a fresh hash of the generator,
+`docs/guide/verification.json`, `app/`, migrations and `uv.lock`; every section
+title must be present; the English guide must contain no Cyrillic. If it
+fails, rebuild with `uv run --locked --group guide python scripts/build_guide.py`
+and inspect every page as described in the [guide README](../guide/README.md).
+
 Run the fictional scenarios directly with
 `uv run --locked python -m app.demo`; see [domain usage](domain.md). A successful
 basic check does not prove detailed reconciliation or authenticated approval.
