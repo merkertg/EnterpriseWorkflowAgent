@@ -11,7 +11,13 @@ from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
 
+from app.domain.documents import DocumentLimits, MediaType
 from app.domain.errors import DomainValidationError
+from app.domain.extraction import (
+    ExtractionProblem,
+    ExtractionResult,
+    ExtractionStatus,
+)
 from app.domain.models import Invoice, PurchaseOrder, validate_text
 from app.domain.rules import ValidationPolicy, ValidationResult
 from app.domain.workflow import Workflow, WorkflowState
@@ -212,12 +218,104 @@ class WorkflowRepository(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
+class StoredDocument:
+    """Metadata of an accepted document; the bytes are stored separately."""
+
+    document_id: UUID
+    content_hash: str
+    media_type: MediaType
+    size_bytes: int
+    page_count: int
+    declared_name: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class StoredExtraction:
+    """One extractor's fields for a document and the decision made about them."""
+
+    extraction_id: UUID
+    document_id: UUID
+    result: ExtractionResult
+    status: ExtractionStatus
+    problems: tuple[ExtractionProblem, ...]
+    invoice_version: VersionRef | None
+
+
+class TextExtractor(Protocol):
+    """Turn accepted bytes into page texts within limits, or reject them."""
+
+    def extract_pages(
+        self, content: bytes, media_type: MediaType, limits: DocumentLimits
+    ) -> tuple[str, ...]:
+        """Return one normalized text per page or raise DocumentRejectedError."""
+        ...
+
+
+class FieldExtractor(Protocol):
+    """Propose invoice fields with evidence; a model provider can implement it."""
+
+    @property
+    def name(self) -> str:
+        """Return a stable name and version, for example labeled-text-parser/1."""
+        ...
+
+    def extract(self, pages: tuple[str, ...]) -> ExtractionResult:
+        """Propose fields; the domain verifies and assesses them afterwards."""
+        ...
+
+
+class DocumentRepository(Protocol):
+    """Store documents, their page texts and extractions in the transaction."""
+
+    def find_document_by_hash(self, content_hash: str) -> StoredDocument | None:
+        """Return an already stored document with identical bytes."""
+        ...
+
+    def get_document(self, document_id: UUID) -> StoredDocument | None:
+        """Return document metadata by server-generated ID."""
+        ...
+
+    def add_document(
+        self, document: StoredDocument, content: bytes, pages: tuple[str, ...]
+    ) -> None:
+        """Insert bytes and page texts; a hash race raises ConcurrentWriteError."""
+        ...
+
+    def get_content(self, document_id: UUID) -> bytes | None:
+        """Return the stored original bytes."""
+        ...
+
+    def get_pages(self, document_id: UUID) -> tuple[str, ...]:
+        """Return stored page texts in page order; evidence refers to these."""
+        ...
+
+    def find_extraction(
+        self, document_id: UUID, extractor: str
+    ) -> StoredExtraction | None:
+        """Return the extraction one extractor already made for a document."""
+        ...
+
+    def latest_extraction(self, document_id: UUID) -> StoredExtraction | None:
+        """Return the most recently stored extraction for a document."""
+        ...
+
+    def add_extraction(self, extraction: StoredExtraction) -> None:
+        """Insert an extraction with its fields and problems."""
+        ...
+
+
 class UnitOfWork(Protocol):
     """One transaction: commit explicitly, otherwise leaving the block rolls back."""
 
     @property
     def repository(self) -> WorkflowRepository:
-        """Return the repository bound to this transaction."""
+        """Return the workflow repository bound to this transaction."""
+        ...
+
+    @property
+    def documents(self) -> DocumentRepository:
+        """Return the document repository bound to the same transaction."""
         ...
 
     def __enter__(self) -> Self:

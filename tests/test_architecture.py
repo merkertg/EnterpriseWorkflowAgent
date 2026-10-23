@@ -6,7 +6,14 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-FRAMEWORKS = ("fastapi", "pydantic", "pydantic_settings", "sqlalchemy", "alembic")
+FRAMEWORKS = (
+    "fastapi",
+    "pydantic",
+    "pydantic_settings",
+    "sqlalchemy",
+    "alembic",
+    "pypdf",
+)
 FORBIDDEN = {
     "app/domain": (*FRAMEWORKS, "psycopg", "app.application", "app.infrastructure"),
     "app/application": (*FRAMEWORKS, "psycopg", "app.infrastructure", "app.api"),

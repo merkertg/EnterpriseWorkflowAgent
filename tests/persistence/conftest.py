@@ -14,12 +14,14 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import Engine, text
 
+from app.application.documents import DocumentService
 from app.application.ports import CommandContext, CommandResult, VersionRef
 from app.application.workflows import WorkflowService
 from app.demo import build_demo_documents
 from app.domain.models import Invoice, PurchaseOrder
 from app.domain.rules import ValidationPolicy
 from app.infrastructure.db.session import (
+    build_document_service,
     build_workflow_service,
     create_database_engine,
     require_test_database_url,
@@ -27,6 +29,10 @@ from app.infrastructure.db.session import (
 
 ROOT = Path(__file__).resolve().parents[2]
 TABLES = (
+    "extracted_fields",
+    "document_extractions",
+    "document_pages",
+    "source_documents",
     "audit_events",
     "idempotency_records",
     "validation_snapshots",
@@ -84,6 +90,12 @@ def engine(migrated_engine: Engine) -> Engine:
 def service(engine: Engine) -> WorkflowService:
     """A service that opens a new transaction for every call."""
     return build_workflow_service(engine)
+
+
+@pytest.fixture
+def document_service(engine: Engine) -> DocumentService:
+    """Document intake with the real PDF worker and deterministic parser."""
+    return build_document_service(engine)
 
 
 def context(key: str) -> CommandContext:

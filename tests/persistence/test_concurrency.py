@@ -13,11 +13,9 @@ from app.application.errors import VersionConflictError
 from app.application.ports import CommandResult, IdempotencyRecord
 from app.application.workflows import WorkflowService
 from app.domain.workflow import HumanDecision
-from app.infrastructure.db.repository import (
-    SqlAlchemyUnitOfWork,
-    SqlAlchemyWorkflowRepository,
-)
+from app.infrastructure.db.repository import SqlAlchemyWorkflowRepository
 from app.infrastructure.db.session import create_session_factory
+from app.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
 from tests.persistence.conftest import Seed, context
 
 pytestmark = pytest.mark.postgres

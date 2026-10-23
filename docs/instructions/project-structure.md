@@ -4,7 +4,7 @@
 
 Keep the initial application small and add a layer when it owns real behavior.
 
-## Implemented in Stages 01–03
+## Implemented in Stages 01–04
 
 | Location | Responsibility |
 | --- | --- |
@@ -19,14 +19,24 @@ Keep the initial application small and add a layer when it owns real behavior.
 | `app/domain/rules.py` | Basic policy, findings and deterministic validation snapshots |
 | `app/domain/workflow.py` | Guarded in-memory transitions and explicit demo decision metadata |
 | `app/domain/content_hash.py` | Canonical JSON and SHA-256 hashes of input versions |
+| `app/domain/documents.py` | Intake limits, format detection, text decoding and rejection codes |
+| `app/domain/extraction.py` | Field schema, evidence verification and completeness assessment |
 | `app/demo.py` | Offline fictional examples printed as JSON |
 | `app/application/ports.py` | Stored records, command context and repository/unit-of-work protocols |
 | `app/application/errors.py` | Stable application error codes |
 | `app/application/workflows.py` | `WorkflowService`: versions, commands, transactions, idempotency |
+| `app/application/documents.py` | `prepare_document`, `DocumentService`: intake, storage and evidence |
 | `app/infrastructure/db/models.py` | SQLAlchemy tables, `NUMERIC` columns and check constraints |
-| `app/infrastructure/db/repository.py` | PostgreSQL repository, hash verification and unit of work |
+| `app/infrastructure/db/repository.py` | PostgreSQL workflow repository and hash verification |
+| `app/infrastructure/db/documents.py` | PostgreSQL document repository |
+| `app/infrastructure/db/inserts.py` | Immediate inserts and constraint-race translation |
+| `app/infrastructure/db/unit_of_work.py` | One session per command, shared by both repositories |
+| `app/infrastructure/documents/` | Text decoding and the isolated `python -I` PDF worker |
+| `app/infrastructure/extraction/labeled_text.py` | Deterministic `Label: value` field extractor |
 | `app/infrastructure/db/session.py` | URL validation, test-database guard, engine and service composition |
 | `app/persistence_demo.py` | Fictional PostgreSQL scenario and `show` command |
+| `app/samples.py` | Fictional text/PDF samples and a deterministic minimal PDF writer |
+| `app/documents_cli.py` | Document `write-samples`, `ingest`, `show`, `evidence` and `demo` |
 | `alembic.ini`, `migrations/` | Alembic configuration, environment and revisions |
 | `tests/` | Automated checks; `tests/persistence/` needs `TEST_DATABASE_URL` |
 | `scripts/check_docs.py` | Local Markdown link validation |
@@ -49,6 +59,8 @@ from its own application instance.
 | `docs/STAGE_03.md` | PostgreSQL, transactions, audit and idempotency walkthrough in Russian |
 | `docs/instructions/domain.md` | Concise Python domain usage and demo commands |
 | `docs/instructions/persistence.md` | Database setup, migrations, demo and service rules |
+| `docs/STAGE_04.md` | Document intake and field provenance walkthrough in Russian |
+| `docs/instructions/documents.md` | Intake limits, field schema, parser, storage and commands |
 | `docs/instructions/` | Short operational instructions in English |
 | `docs/CI_CD.md` | CI configuration and limits of remote verification |
 | `docs/VERIFICATION.md` | Recorded command outcomes and limitations |
@@ -62,9 +74,8 @@ directories to create now:
 
 | Location | Add when needed for |
 | --- | --- |
-| `app/infrastructure/` (other adapters) | Document parsers, model providers and event delivery |
+| `app/infrastructure/` (other adapters) | Model providers and event delivery |
 | `ui/` | A client that calls the API |
-| `data/` | Clearly labelled fictional demonstration inputs |
 | `evals/` | Versioned evaluation cases and independent expected results |
 
 The persistence flow is `WorkflowService → UnitOfWork → SqlAlchemyWorkflowRepository

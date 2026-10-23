@@ -6,8 +6,12 @@ from sqlalchemy import URL, Engine, create_engine, make_url
 from sqlalchemy.exc import ArgumentError
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.application.documents import DocumentService
 from app.application.workflows import WorkflowService
-from app.infrastructure.db.repository import SqlAlchemyUnitOfWork
+from app.domain.documents import DocumentLimits
+from app.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
+from app.infrastructure.documents.text_extraction import LimitedTextExtractor
+from app.infrastructure.extraction.labeled_text import LabeledTextInvoiceParser
 
 _DRIVER = "postgresql+psycopg"
 # Fail instead of waiting indefinitely on a lock or an unexpectedly slow query.
@@ -55,4 +59,16 @@ def build_workflow_service(engine: Engine) -> WorkflowService:
     """Compose the application service with one new unit of work per call."""
     return WorkflowService(
         partial(SqlAlchemyUnitOfWork, create_session_factory(engine))
+    )
+
+
+def build_document_service(
+    engine: Engine, limits: DocumentLimits | None = None
+) -> DocumentService:
+    """Compose document intake with the PDF worker and deterministic parser."""
+    return DocumentService(
+        partial(SqlAlchemyUnitOfWork, create_session_factory(engine)),
+        LimitedTextExtractor(),
+        LabeledTextInvoiceParser(),
+        limits,
     )

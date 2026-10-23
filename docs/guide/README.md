@@ -1,7 +1,9 @@
 # Руководства и сводка проверки
 
 Для EnterpriseWorkflowAgent запланированы отдельные PDF-руководства
-на русском и английском языках. На этапах 01–03 PDF и генератор ещё не созданы.
+на русском и английском языках. На этапах 01–04 PDF-руководства и их
+генератор ещё не созданы (генератор `app/samples.py` создаёт только учебные
+образцы счетов).
 Канонический текст сейчас хранится в Markdown:
 
 - [README проекта](../../README.md) — входная точка и текущий статус;
@@ -9,6 +11,7 @@
 - [STAGE_02.md](../STAGE_02.md) — предметная модель, деньги и переходы процесса;
 - [STAGE_03.md](../STAGE_03.md) — PostgreSQL, миграции, транзакции, аудит
   и идемпотентность;
+- [STAGE_04.md](../STAGE_04.md) — приём документов, извлечение полей и цитаты;
 - [instructions/quickstart.md](../instructions/quickstart.md),
   [usage.md](../instructions/usage.md),
   [testing.md](../instructions/testing.md),
@@ -17,6 +20,8 @@
 - [instructions/domain.md](../instructions/domain.md) — работа с доменной моделью;
 - [instructions/persistence.md](../instructions/persistence.md) — база данных,
   миграции и демонстрация хранения;
+- [instructions/documents.md](../instructions/documents.md) — приём документов
+  и происхождение полей;
 - [CI_CD.md](../CI_CD.md) — устройство автоматических проверок;
 - [VERIFICATION.md](../VERIFICATION.md) — фактические результаты и ограничения.
 

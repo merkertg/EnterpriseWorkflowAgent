@@ -16,9 +16,11 @@ from sqlalchemy import (
     ForeignKey,
     Identity,
     Integer,
+    LargeBinary,
     MetaData,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
     func,
     text,
@@ -27,6 +29,8 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.application.ports import CommandName
+from app.domain.documents import MediaType
+from app.domain.extraction import ExtractionStatus, FieldStatus
 from app.domain.money import Currency
 from app.domain.workflow import WorkflowState
 
@@ -53,6 +57,9 @@ def _one_of(column: str, values: tuple[str, ...]) -> str:
 CURRENCY_VALUES = tuple(item.value for item in Currency)
 STATE_VALUES = tuple(item.value for item in WorkflowState)
 COMMAND_VALUES = tuple(item.value for item in CommandName)
+MEDIA_TYPE_VALUES = tuple(item.value for item in MediaType)
+EXTRACTION_STATUS_VALUES = tuple(item.value for item in ExtractionStatus)
+FIELD_STATUS_VALUES = tuple(item.value for item in FieldStatus)
 
 
 class Base(DeclarativeBase):
@@ -308,6 +315,93 @@ class IdempotencyRecordRow(Base):
     created_at: Mapped[datetime] = _created_at()
 
 
+class SourceDocumentRow(Base):
+    """An accepted document's original bytes under a server-generated ID."""
+
+    __tablename__ = "source_documents"
+    __table_args__ = (
+        UniqueConstraint("content_hash"),
+        CheckConstraint(f"content_hash ~ {HASH_PATTERN}", name="content_hash_hex"),
+        CheckConstraint(_one_of("media_type", MEDIA_TYPE_VALUES), name="media_type"),
+        CheckConstraint(
+            "size_bytes > 0 AND size_bytes = octet_length(content)",
+            name="size_matches_content",
+        ),
+        CheckConstraint("page_count > 0", name="page_count_positive"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    media_type: Mapped[str] = mapped_column(String(32))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    page_count: Mapped[int] = mapped_column(Integer)
+    declared_name: Mapped[str | None] = mapped_column(String(255))
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime] = _created_at()
+
+
+class DocumentPageRow(Base):
+    """Normalized text of one page; evidence offsets point into this text."""
+
+    __tablename__ = "document_pages"
+    __table_args__ = (CheckConstraint("page_no > 0", name="page_no_positive"),)
+
+    document_id: Mapped[UUID] = mapped_column(
+        ForeignKey("source_documents.id"), primary_key=True
+    )
+    page_no: Mapped[int] = mapped_column(Integer, primary_key=True)
+    text: Mapped[str] = mapped_column(Text)
+
+
+class DocumentExtractionRow(Base):
+    """One extractor's result for a document and the completeness decision."""
+
+    __tablename__ = "document_extractions"
+    __table_args__ = (
+        UniqueConstraint("document_id", "extractor"),
+        CheckConstraint(_one_of("status", EXTRACTION_STATUS_VALUES), name="status"),
+        CheckConstraint(
+            "(status = 'complete') = (invoice_version_id IS NOT NULL)",
+            name="invoice_only_when_complete",
+        ),
+        CheckConstraint("jsonb_typeof(problems) = 'array'", name="problems_array"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    document_id: Mapped[UUID] = mapped_column(
+        ForeignKey("source_documents.id"), index=True
+    )
+    extractor: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(32))
+    invoice_version_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("invoice_versions.id")
+    )
+    problems: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = _created_at()
+
+
+class ExtractedFieldRow(Base):
+    """One proposed field, its status and the spans that support it."""
+
+    __tablename__ = "extracted_fields"
+    __table_args__ = (
+        UniqueConstraint("extraction_id", "name"),
+        CheckConstraint(_one_of("status", FIELD_STATUS_VALUES), name="status"),
+        CheckConstraint("position >= 0", name="position_nonnegative"),
+        CheckConstraint("jsonb_typeof(evidence) = 'array'", name="evidence_array"),
+    )
+
+    extraction_id: Mapped[UUID] = mapped_column(
+        ForeignKey("document_extractions.id"), primary_key=True
+    )
+    position: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16))
+    value: Mapped[str | None] = mapped_column(String(500))
+    message: Mapped[str | None] = mapped_column(String(500))
+    evidence: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+
+
 # Rows that must never change after insertion; a database trigger enforces this.
 APPEND_ONLY_TABLES = (
     "invoice_versions",
@@ -318,4 +412,8 @@ APPEND_ONLY_TABLES = (
     "validation_snapshots",
     "audit_events",
     "idempotency_records",
+    "source_documents",
+    "document_pages",
+    "document_extractions",
+    "extracted_fields",
 )

@@ -22,7 +22,7 @@ real supplier or modify a production ERP system.
 
 ## Delivery strategy
 
-Stages 01–03 are implemented. Stage 01 establishes a small FastAPI service,
+Stages 01–04 are implemented. Stage 01 establishes a small FastAPI service,
 environment settings, tests, static checks and documentation. Stage 02 adds a
 standard-library domain with immutable purchasing models, exact money, seven
 basic rule findings and in-memory workflow transitions.
@@ -30,7 +30,9 @@ basic rule findings and in-memory workflow transitions.
 demonstrates three fictional scenarios without any external service. Stage 03
 persists workflows in PostgreSQL with migrations, hashed input versions,
 validation snapshots, audit, optimistic locking and idempotency;
-`uv run --locked python -m app.persistence_demo` exercises it.
+`uv run --locked python -m app.persistence_demo` exercises it. Stage 04 accepts
+bounded text and text-layer PDFs, extracts fields with verified source spans
+and is exercised by `uv run --locked python -m app.documents_cli demo`.
 The default local port is `8003`. The initial endpoint is `GET /health`; with
 default settings it returns:
 
@@ -66,9 +68,13 @@ app/
     schemas/health.py     # Response contract
   domain/                 # Money, documents, rules, transitions, content hashes
   application/            # WorkflowService, records and persistence ports
-  infrastructure/db/      # SQLAlchemy tables, repository, engine and unit of work
+  infrastructure/db/      # SQLAlchemy tables, repositories, engine and unit of work
+  infrastructure/documents/   # Text decoding and the isolated PDF worker
+  infrastructure/extraction/  # Deterministic field extractor
   demo.py                 # Fictional offline scenarios; no HTTP or storage
   persistence_demo.py     # Fictional PostgreSQL scenario and read-back command
+  samples.py              # Fictional text/PDF samples and a tiny PDF writer
+  documents_cli.py        # Document intake, evidence and demo commands
 migrations/               # Alembic environment and revisions
 tests/
 ```
@@ -81,7 +87,7 @@ their behavior is introduced:
 | --- | --- | --- |
 | `domain/` | Typed business objects, money, rules and allowed state transitions | Python and explicit domain types; no HTTP, database or model SDK |
 | `application/` | Use cases, authorization requirements and transaction orchestration | Domain and ports for persistence, extraction and events |
-| `infrastructure/` | SQLAlchemy repositories (implemented), file storage, extraction/provider adapters and event delivery (planned) | Implements application ports |
+| `infrastructure/` | SQLAlchemy repositories, PDF/text extraction and the deterministic field extractor (implemented); model providers and event delivery (planned) | Implements application ports |
 | `api/` | HTTP schemas, authentication context, request validation and error mapping | Application use cases |
 
 The composition root wires adapters into use cases. Domain decisions must not
@@ -99,7 +105,12 @@ Missing evidence, an unsupported currency or ambiguous extraction requires
 review. A plausible explanation is not proof that a field is correct. Documents
 are untrusted data and cannot grant instructions, permissions or tool access.
 
-The first extraction implementation uses deterministic parsers and fixtures.
+The first extraction implementation uses a deterministic parser and generated
+fictional samples ([ADR 0004](adr/0004-document-intake-and-field-provenance.md)).
+Every extractor only proposes fields; `assess_extraction` accepts a value only
+if the stored page text at each cited span equals it, enforces a strict schema
+and canonical formats, and sends incomplete results to review. PDFs are parsed
+in a separate isolated process with a hard timeout.
 The agent runtime starts with a fake provider, then optionally gains a real
 provider adapter. Constrain tool names, arguments, output sizes, execution time
 and total steps. Approval and payment commands are not agent tools. Tool calls
@@ -131,8 +142,9 @@ Invoices, purchase orders and policies are stored as append-only versions in
 typed tables with `NUMERIC` money and a SHA-256 hash of canonical content,
 re-verified on every load. A workflow pins explicit version IDs; each check
 stores an immutable snapshot of those IDs, hashes and findings. One transaction
-writes the idempotency record, snapshot, workflow update and audit event. Until
-Stage 04 the stored source is the structured invoice, not an uploaded file.
+writes the idempotency record, snapshot, workflow update and audit event. Since
+Stage 04 an invoice version can also come from a stored document whose
+extraction records the source of every field.
 The Stage 05 reconciliation snapshot will add extracted-field versions and
 detailed results. Historical snapshots retain their original inputs instead of
 silently following the latest PO or policy. Stage 03 does not yet flag a pinned
@@ -176,9 +188,9 @@ rather than becoming a second independent specification.
 
 ## Current exclusions
 
-The HTTP API currently exposes only liveness. Document upload, detailed
-reconciliation, authentication, HTTP workflow commands, an AI runtime and a user
-interface remain unimplemented. The wider project does not
+The HTTP API currently exposes only liveness. HTTP document upload, detailed
+reconciliation, authentication, HTTP workflow commands, an AI runtime, manual
+field correction and a user interface remain unimplemented. The wider project does not
 promise production readiness, real payments, autonomous approval or unrestricted
 code execution. OCR, multi-tenant operation and production ERP connectors require
 separate decisions and acceptance criteria.

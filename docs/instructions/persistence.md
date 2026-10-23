@@ -107,4 +107,5 @@ Stage 02 codes such as `invalid_transition`.
 - Triggers stop accidental edits. A database owner can still disable them.
 - No backups, retention policy, multi-tenant isolation or HTTP commands.
 
+Revision `0002` (Stage 04) adds document tables; see [documents](documents.md).
 For integration tests see [testing](testing.md).

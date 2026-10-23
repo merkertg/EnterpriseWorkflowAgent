@@ -2,9 +2,10 @@
 
 [README](../../README.md) · [Detailed Stage 01 guide in Russian](../STAGE_01.md)
 
-Stages 01–03 provide a local FastAPI liveness endpoint, an in-memory domain
-demonstration and PostgreSQL persistence used through Python and a demo CLI.
-The HTTP service does not process documents or expose workflow commands yet.
+Stages 01–04 provide a local FastAPI liveness endpoint, an in-memory domain
+demonstration, PostgreSQL persistence and document intake used through Python
+and command-line tools. The HTTP service does not accept documents or expose
+workflow commands yet.
 
 ## Prepare
 
@@ -67,3 +68,8 @@ No Uvicorn or credentials are needed; see [domain usage](domain.md).
 For Stage 03 storage, create PostgreSQL databases, set `DATABASE_URL`, then run
 `uv run --locked alembic upgrade head` and
 `uv run --locked python -m app.persistence_demo`; see [persistence](persistence.md).
+
+For Stage 04 documents, run
+`uv run --locked python -m app.documents_cli write-samples var/samples` (no
+database needed), then `ingest`, `evidence` or `demo`; see
+[documents](documents.md).

@@ -43,5 +43,8 @@ endpoints. See [domain usage](domain.md) for its demonstration and limits.
 Stage 03 adds PostgreSQL persistence used through Python and
 `python -m app.persistence_demo`; it adds no HTTP endpoints, and `/health` does
 not check the database. See [persistence](persistence.md).
+Stage 04 document intake is available through `python -m app.documents_cli`;
+the HTTP upload endpoint is planned with authorization in Stage 06. See
+[documents](documents.md).
 
 For settings and server commands, see [Quickstart](quickstart.md).

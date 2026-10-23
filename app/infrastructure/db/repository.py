@@ -7,22 +7,14 @@ re-hashed, so silently edited content is reported instead of trusted.
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from decimal import Decimal
-from types import TracebackType
-from typing import Any, Self, cast
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import CursorResult, select, update
 from sqlalchemy import func as sql_func
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
-from app.application.errors import (
-    ConcurrentWriteError,
-    IdempotencyKeyClaimedError,
-    StoredDataIntegrityError,
-    VersionConflictError,
-    WorkflowAlreadyExistsError,
-)
+from app.application.errors import StoredDataIntegrityError, VersionConflictError
 from app.application.ports import (
     AuditEvent,
     CommandName,
@@ -39,6 +31,7 @@ from app.domain.models import Invoice, LineItem, PurchaseOrder
 from app.domain.money import Currency, Money
 from app.domain.rules import IssueCode, RuleIssue, ValidationPolicy, ValidationResult
 from app.domain.workflow import HumanDecision, Workflow, WorkflowState
+from app.infrastructure.db.inserts import insert_rows
 from app.infrastructure.db.models import (
     AuditEventRow,
     IdempotencyRecordRow,
@@ -51,23 +44,9 @@ from app.infrastructure.db.models import (
     WorkflowRow,
 )
 
-# Unique constraints whose violation means "another writer was first".
-_VERSION_RACES = {
-    "uq_invoice_versions_invoice_id_version_no",
-    "uq_purchase_order_versions_purchase_order_id_version_no",
-    "uq_policy_versions_policy_id_version_no",
-}
-
-
-def _constraint_name(error: IntegrityError) -> str | None:
-    """Read the violated constraint reported by PostgreSQL through psycopg."""
-    diagnostics = getattr(error.orig, "diag", None)
-    name = getattr(diagnostics, "constraint_name", None)
-    return name if isinstance(name, str) else None
-
 
 @contextmanager
-def _reconstructing(label: str) -> Iterator[None]:
+def reconstructing(label: str) -> Iterator[None]:
     """Report stored data the domain rejects as an integrity problem."""
     try:
         yield
@@ -131,25 +110,8 @@ class SqlAlchemyWorkflowRepository:
         self._session = session
 
     def _insert(self, *rows: object) -> None:
-        """Flush immediately so constraint races surface at a known point."""
-        self._session.add_all(rows)
-        try:
-            self._session.flush()
-        except IntegrityError as error:
-            name = _constraint_name(error)
-            if name in _VERSION_RACES:
-                raise ConcurrentWriteError(
-                    "Another writer created this version."
-                ) from error
-            if name == "pk_idempotency_records":
-                raise IdempotencyKeyClaimedError(
-                    "Another request committed this idempotency key."
-                ) from error
-            if name == "pk_workflows":
-                raise WorkflowAlreadyExistsError(
-                    "Workflow ID is already in use."
-                ) from error
-            raise
+        """Insert through the shared helper that maps constraint races."""
+        insert_rows(self._session, *rows)
 
     # Versions -----------------------------------------------------------------
 
@@ -264,7 +226,7 @@ class SqlAlchemyWorkflowRepository:
             .where(InvoiceLineRow.invoice_version_id == version_id)
             .order_by(InvoiceLineRow.line_no)
         ).all()
-        with _reconstructing("invoice version"):
+        with reconstructing("invoice version"):
             currency = Currency(row.currency)
             invoice = Invoice(
                 invoice_id=row.invoice_id,
@@ -289,7 +251,7 @@ class SqlAlchemyWorkflowRepository:
             .where(PurchaseOrderLineRow.purchase_order_version_id == version_id)
             .order_by(PurchaseOrderLineRow.line_no)
         ).all()
-        with _reconstructing("purchase order version"):
+        with reconstructing("purchase order version"):
             currency = Currency(row.currency)
             order = PurchaseOrder(
                 purchase_order_id=row.purchase_order_id,
@@ -309,7 +271,7 @@ class SqlAlchemyWorkflowRepository:
         row = self._session.get(PolicyVersionRow, version_id)
         if row is None:
             return None
-        with _reconstructing("policy version"):
+        with reconstructing("policy version"):
             policy = ValidationPolicy(
                 policy_id=row.policy_id,
                 allowed_currencies=tuple(
@@ -370,7 +332,7 @@ class SqlAlchemyWorkflowRepository:
             if row.decision_actor_id is None or row.decision_reason is None
             else HumanDecision(row.decision_actor_id, row.decision_reason)
         )
-        with _reconstructing("workflow"):
+        with reconstructing("workflow"):
             workflow = Workflow(
                 workflow_id=row.workflow_id,
                 invoice=invoice.value,
@@ -491,7 +453,7 @@ class SqlAlchemyWorkflowRepository:
             raise StoredDataIntegrityError(
                 "Snapshot hashes or totals disagree with stored inputs."
             )
-        with _reconstructing("validation snapshot"):
+        with reconstructing("validation snapshot"):
             result = ValidationResult(
                 invoice=invoice.value,
                 purchase_order=None if order is None else order.value,
@@ -593,45 +555,3 @@ class SqlAlchemyWorkflowRepository:
                 snapshot_id=result.snapshot_id,
             )
         )
-
-
-class SqlAlchemyUnitOfWork:
-    """Open one session per command; leaving without commit rolls back."""
-
-    def __init__(self, session_factory: sessionmaker[Session]) -> None:
-        """Store the factory; the session is created when the block starts."""
-        self._session_factory = session_factory
-        self._session: Session | None = None
-        self._repository: SqlAlchemyWorkflowRepository | None = None
-
-    @property
-    def repository(self) -> SqlAlchemyWorkflowRepository:
-        """Return the repository for the open transaction."""
-        if self._repository is None:
-            raise RuntimeError("Use the unit of work inside a with block.")
-        return self._repository
-
-    def __enter__(self) -> Self:
-        """Start a session; SQLAlchemy begins the transaction on first use."""
-        self._session = self._session_factory()
-        self._repository = SqlAlchemyWorkflowRepository(self._session)
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        """Discard uncommitted work, including after an exception, and close."""
-        if self._session is not None:
-            self._session.rollback()
-            self._session.close()
-        self._session = None
-        self._repository = None
-
-    def commit(self) -> None:
-        """Commit every write made through this unit's repository."""
-        if self._session is None:
-            raise RuntimeError("Use the unit of work inside a with block.")
-        self._session.commit()

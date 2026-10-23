@@ -9,8 +9,10 @@ from alembic.migration import MigrationContext
 from sqlalchemy import Engine, inspect, text
 from sqlalchemy.exc import DBAPIError
 
+from app.application.documents import DocumentService
 from app.application.workflows import WorkflowService
 from app.infrastructure.db.models import APPEND_ONLY_TABLES, Base
+from app.samples import clean_invoice_text
 from tests.persistence.conftest import TABLES, Seed, alembic_config, context
 
 pytestmark = pytest.mark.postgres
@@ -62,10 +64,15 @@ def test_stored_amounts_are_decimal_values(engine: Engine, seed: Seed) -> None:
 
 @pytest.mark.parametrize("table", APPEND_ONLY_TABLES)
 def test_history_tables_reject_update_and_delete(
-    engine: Engine, service: WorkflowService, seed: Seed, table: str
+    engine: Engine,
+    service: WorkflowService,
+    document_service: DocumentService,
+    seed: Seed,
+    table: str,
 ) -> None:
     """A trigger blocks edits, so stored history cannot be rewritten silently."""
     service.check(seed.workflow_id, expected_version=1, context=context("check"))
+    document_service.ingest(clean_invoice_text().encode(), "clean_invoice.txt")
     for statement in (f"UPDATE {table} SET {_column(table)}", f"DELETE FROM {table}"):
         with pytest.raises(DBAPIError, match="append-only"), engine.begin() as conn:
             conn.execute(text(statement))
@@ -93,4 +100,10 @@ def _column(table: str) -> str:
         return "source = source"
     if table == "idempotency_records":
         return "command = command"
+    if table == "document_pages":
+        return "text = text"
+    if table == "extracted_fields":
+        return "position = position"
+    if table == "document_extractions":
+        return "status = status"
     return "created_at = created_at"

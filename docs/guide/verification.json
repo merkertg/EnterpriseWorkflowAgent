@@ -1,12 +1,13 @@
 {
   "project": "enterprise-workflow-agent",
-  "stage": "03",
-  "implemented_stages": ["01", "02", "03"],
+  "stage": "04",
+  "implemented_stages": ["01", "02", "03", "04"],
   "status": "implemented_locally_verified",
   "verified_on": "2026-10-23",
   "timezone": "Asia/Tashkent",
   "git": {
-    "base_commit": "d83a9b0",
+    "base_commit": "cbebe08",
+    "base_commit_pushed_to": "main",
     "scope": "uncommitted_working_tree",
     "committed": false,
     "pushed": false
@@ -23,6 +24,7 @@
     "sqlalchemy": "2.1.4",
     "alembic": "1.20.0",
     "psycopg": "3.3.6",
+    "pypdf": "6.19.0",
     "pytest": "9.1.1",
     "ruff": "0.16.10",
     "mypy": "2.4.0",
@@ -33,81 +35,60 @@
     {"command": "uv lock --check --offline", "status": "passed"},
     {"command": "uv sync --locked --offline", "status": "passed"},
     {"command": "uv run --locked ruff check .", "status": "passed"},
-    {"command": "uv run --locked ruff format --check .", "status": "passed", "files": 74},
-    {"command": "uv run --locked mypy app tests scripts migrations", "status": "passed", "source_files": 54},
-    {"command": "uv run --locked pytest", "database": "none", "status": "passed", "passed": 176, "failed": 0, "skipped": 36},
-    {"command": "REQUIRE_TEST_DATABASE=1 TEST_DATABASE_URL=... uv run --locked pytest", "database": "enterprise_workflow_test", "status": "passed", "passed": 212, "failed": 0, "skipped": 0},
-    {"command": "uv run --locked pytest -m postgres", "database": "enterprise_workflow_test", "status": "passed", "passed": 36, "deselected": 176},
-    {"command": "uv run --locked alembic upgrade head", "status": "passed", "revision": "0001"},
-    {"command": "uv run --locked alembic downgrade base && uv run --locked alembic upgrade head", "status": "passed"},
+    {"command": "uv run --locked ruff format --check .", "status": "passed", "files": 98},
+    {"command": "uv run --locked mypy app tests scripts migrations", "status": "passed", "source_files": 75},
+    {"command": "uv run --locked pytest", "database": "none", "status": "passed", "passed": 244, "failed": 0, "skipped": 52},
+    {"command": "REQUIRE_TEST_DATABASE=1 TEST_DATABASE_URL=... uv run --locked pytest", "database": "enterprise_workflow_test", "status": "passed", "passed": 296, "failed": 0, "skipped": 0},
+    {"command": "uv run --locked pytest -m postgres", "database": "enterprise_workflow_test", "status": "passed", "passed": 52, "deselected": 244},
+    {"command": "uv run --locked alembic upgrade head", "status": "passed", "revision": "0002"},
+    {"command": "uv run --locked alembic downgrade 0001 && uv run --locked alembic upgrade head", "status": "passed"},
     {"command": "uv run --locked alembic check", "status": "passed", "output": "No new upgrade operations detected."},
-    {"command": "uv run --locked alembic upgrade head --sql", "status": "passed", "create_table_statements": 10},
-    {"command": "uv run --locked python -m app.demo", "status": "passed", "scenarios": 3},
-    {"command": "uv run --locked python -m app.persistence_demo", "status": "passed", "steps": 7},
-    {"command": "uv run --locked python scripts/check_docs.py", "status": "passed", "links": 125, "files": 20, "scope": "local_inline_markdown_target_files_only"},
+    {"command": "uv run --locked alembic upgrade head --sql", "status": "passed", "create_table_statements": 14},
+    {"command": "uv run --locked python -m app.documents_cli demo", "status": "passed", "runs": 2, "second_run_reused_documents": 4, "workflow_state_after_check": "awaiting_approval"},
+    {"command": "uv run --locked python -m app.persistence_demo", "status": "passed"},
+    {"command": "uv run --locked python -m app.demo", "status": "passed"},
+    {"command": "uv run --locked python scripts/check_docs.py", "status": "passed", "links": 152, "files": 23, "scope": "local_inline_markdown_target_files_only"},
     {"command": "git diff --check plus trailing-whitespace scan", "status": "passed"}
   ],
-  "concurrency": {
-    "race_found": "duplicate committed between key lookup and workflow read returned version_conflict",
-    "failures_before_fix": "8 of 10 runs",
-    "deterministic_regression_test": "fails_without_fix_passes_with_fix",
-    "repeated_runs_after_fix": {"test_concurrency": 30, "test_concurrency_and_versions": 15, "failures": 0}
-  },
-  "restart_check": {
-    "status": "passed",
-    "method": "pg_ctl stop -m fast, pg_ctl start, persistence_demo show in a new process",
-    "workflow_id": "DEMO-WF-7893b40c0330",
-    "stored_state_identical": true
-  },
+  "repeated_runs": {"files": ["tests/persistence/test_documents.py", "tests/persistence/test_concurrency.py"], "runs": 15, "failures": 0},
   "http_smoke": {
     "status": "passed",
     "checked_stage": "01",
-    "repeated_in_stages_02_03": false,
-    "transport": "real_uvicorn_loopback_http",
-    "host": "127.0.0.1",
-    "port": 8003,
-    "endpoints": {
-      "/health": 200,
-      "/docs": 200,
-      "/redoc": 200,
-      "/openapi.json": 200
-    },
-    "server_stopped_after_check": true
+    "repeated_since": false,
+    "endpoints": {"/health": 200, "/docs": 200, "/redoc": 200, "/openapi.json": 200}
   },
   "remote_ci": {
     "status": "not_verified",
     "run_url": null,
-    "configured": ["postgres:18.3 service pinned by digest", "alembic upgrade head", "alembic check", "REQUIRE_TEST_DATABASE=1"]
+    "reason": "Built-in browser not signed in to GitHub; gh CLI not installed."
   },
   "real_llm": {"status": "not_implemented"},
-  "document_processing": {"status": "not_implemented"},
-  "domain": {
+  "documents": {
     "status": "implemented_locally_verified",
-    "runtime_dependencies": "python_standard_library_only",
-    "rule_issue_codes": 7,
-    "currencies": ["USD", "EUR", "UZS"],
-    "line_rounding": "ROUND_HALF_UP",
-    "decimal_places": 2,
-    "content_hash": "sha256_of_canonical_json"
+    "formats": ["text/plain (UTF-8)", "application/pdf (text layer)"],
+    "limits": {"max_bytes": 1048576, "max_pages": 20, "max_text_chars": 200000, "pdf_timeout_seconds": 5.0},
+    "rejection_codes": 10,
+    "pdf_parsing": "pypdf in a separate python -I process, killed at timeout",
+    "pdf_memory_limit": false,
+    "extractor": "labeled-text-parser/1",
+    "evidence": "page plus [start, end) offsets into stored page text, verified on assessment and on reading",
+    "incomplete_extraction": "needs_review without invoice version",
+    "storage": ["source_documents", "document_pages", "document_extractions", "extracted_fields"],
+    "deduplication": "unique SHA-256 of bytes",
+    "http_upload": "planned_stage_06",
+    "ocr": false,
+    "manual_field_correction": false,
+    "new_tests_without_database": 68,
+    "new_tests_with_database": 16
   },
   "database": {
     "status": "implemented_locally_verified",
-    "engine": "postgresql",
-    "migrations": ["0001"],
-    "tables": 9,
-    "money_column": "NUMERIC(14,2)",
-    "quantity_column": "NUMERIC(12,6)",
-    "append_only_tables": 8,
-    "transactional_audit": true,
-    "optimistic_locking": true,
-    "idempotency_keys": true,
-    "immutable_input_versions": ["invoice", "purchase_order", "validation_policy"],
-    "test_database_guard": "name_must_end_with__test",
-    "new_tests_without_database": 34,
-    "new_tests_with_database": 36,
+    "migrations": ["0001", "0002"],
+    "tables": 13,
+    "append_only_tables": 12,
     "stale_version_detection": "planned_stage_05_06"
   },
   "human_approvals": {"status": "service_command_without_authentication", "authenticated_identity": false, "http_api": "not_implemented"},
   "pdf_guides": {"status": "planned"},
-  "next_stage": "04"
+  "next_stage": "05"
 }

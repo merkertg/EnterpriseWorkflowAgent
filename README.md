@@ -6,16 +6,21 @@ document, extract fields with source evidence, apply corporate rules, show
 discrepancies, obtain an employee's decision and record the next process step.
 All examples will use fictional data.
 
-**Current scope: Stages 01–03 — API foundation, domain and PostgreSQL storage.**
+**Current scope: Stages 01–04 — API foundation, domain, PostgreSQL storage and
+document intake.**
 The repository contains a FastAPI liveness endpoint, validated settings, exact
 money and purchasing models, seven basic validation reasons and an immutable
 workflow. Stage 03 persists it in PostgreSQL through Alembic migrations, with
 append-only hashed input versions, validation snapshots, a transactional audit
-trail, optimistic locking and idempotent commands. Isolated tests, PostgreSQL
-integration tests, Ruff, strict mypy, a locked environment and a GitHub Actions
-workflow cover this work. Actual results and unverified items are recorded in
-[verification](docs/VERIFICATION.md). Document ingestion, authenticated
-approvals, HTTP workflow commands and an LLM are planned.
+trail, optimistic locking and idempotent commands. Stage 04 accepts bounded
+UTF-8 text and text-layer PDFs, extracts invoice fields deterministically and
+records the exact page and character span behind every value; incomplete
+extractions wait for review instead of producing an invoice. Isolated tests,
+PostgreSQL integration tests, Ruff, strict mypy, a locked environment and a
+GitHub Actions workflow cover this work. Actual results and unverified items are
+recorded in [verification](docs/VERIFICATION.md). Detailed reconciliation,
+authenticated approvals, HTTP workflow and upload endpoints and an LLM are
+planned.
 
 The planned design is a modular monolith. Deterministic code calculates amounts,
 checks rules and controls state transitions. The AI assistant proposes fields and
@@ -24,7 +29,8 @@ initiate payments or act on real corporate systems.
 
 **По-русски:** основа API — [этап 01](docs/STAGE_01.md), предметная модель,
 правила и состояния — [этап 02](docs/STAGE_02.md), хранение, транзакции и
-аудит — [этап 03](docs/STAGE_03.md).
+аудит — [этап 03](docs/STAGE_03.md), документы и происхождение полей —
+[этап 04](docs/STAGE_04.md).
 Все этапы и критерии готовности — в [дорожной карте](docs/ROADMAP.md).
 
 ## Quickstart
@@ -107,6 +113,30 @@ audit event in one transaction. `actor_id` and `source` are caller-declared, not
 authenticated. A newer PO version does not yet mark a pinned result stale; that
 is Stage 05/06 work. See [persistence](docs/instructions/persistence.md).
 
+## Documents and field provenance
+
+```bash
+uv run --locked python -m app.documents_cli write-samples var/samples
+uv run --locked python -m app.documents_cli ingest var/samples/clean_invoice.pdf
+uv run --locked python -m app.documents_cli evidence DOCUMENT_ID declared_total
+uv run --locked python -m app.documents_cli demo
+```
+
+Files are accepted only as UTF-8 text or PDF with a text layer, up to 1 MiB,
+20 pages and 200 000 characters; format comes from the bytes, not the name.
+PDFs are parsed by pypdf in a separate `python -I` process that is killed after
+5 seconds. Refused files (`unsupported_type`, `too_large`, `no_text_layer`,
+`invalid_text_encoding` and others) are never stored, and `ingest` reports them
+without a database.
+
+A deterministic `Label: value` parser proposes fields; the domain accepts a
+value only if the text at each cited span equals it exactly, and only a
+complete, well-formed extraction becomes an invoice version that can start a
+workflow. `evidence` prints the page, line number, offsets and quote. Text
+inside a document is data: an "approve this invoice" sentence changes nothing.
+Requires `DATABASE_URL` and migration `0002` for storage. See
+[documents](docs/instructions/documents.md).
+
 ## Stages
 
 | Stage | Deliverable | Status |
@@ -114,7 +144,7 @@ is Stage 05/06 work. See [persistence](docs/instructions/persistence.md).
 | 01 | API foundation, settings, tests, checks and documentation | Implemented; see verification |
 | 02 | Domain objects, workflow state machine and basic rules | Implemented; in-memory demo only |
 | 03 | PostgreSQL, migrations, transactional audit and idempotency | Implemented; PostgreSQL verified locally |
-| 04 | Safe text/PDF ingestion and fields with provenance | Planned |
+| 04 | Safe text/PDF ingestion and fields with provenance | Implemented; verified locally |
 | 05 | Deterministic invoice reconciliation and discrepancy reports | Planned |
 | 06 | Employee approvals, roles and transactional outbox | Planned |
 | 07 | Bounded AI tools, demo provider and optional real model | Planned |
@@ -148,9 +178,9 @@ not been verified.
 | Purpose | Source |
 | --- | --- |
 | Stage plan and completion criteria (RU) | [ROADMAP](docs/ROADMAP.md) |
-| Detailed learning guides (RU) | [STAGE 01](docs/STAGE_01.md), [STAGE 02](docs/STAGE_02.md), [STAGE 03](docs/STAGE_03.md) |
-| Short task instructions (EN) | [Quickstart](docs/instructions/quickstart.md), [API](docs/instructions/usage.md), [domain](docs/instructions/domain.md), [persistence](docs/instructions/persistence.md), [testing](docs/instructions/testing.md), [project structure](docs/instructions/project-structure.md) |
-| Design and decisions (EN) | [Approach](docs/APPROACH.md), [ADR 0001](docs/adr/0001-modular-monolith-and-tooling.md), [ADR 0002](docs/adr/0002-domain-rules-and-workflow.md), [ADR 0003](docs/adr/0003-postgresql-persistence-audit-idempotency.md) |
+| Detailed learning guides (RU) | [STAGE 01](docs/STAGE_01.md), [STAGE 02](docs/STAGE_02.md), [STAGE 03](docs/STAGE_03.md), [STAGE 04](docs/STAGE_04.md) |
+| Short task instructions (EN) | [Quickstart](docs/instructions/quickstart.md), [API](docs/instructions/usage.md), [domain](docs/instructions/domain.md), [persistence](docs/instructions/persistence.md), [documents](docs/instructions/documents.md), [testing](docs/instructions/testing.md), [project structure](docs/instructions/project-structure.md) |
+| Design and decisions (EN) | [Approach](docs/APPROACH.md), [ADR 0001](docs/adr/0001-modular-monolith-and-tooling.md), [ADR 0002](docs/adr/0002-domain-rules-and-workflow.md), [ADR 0003](docs/adr/0003-postgresql-persistence-audit-idempotency.md), [ADR 0004](docs/adr/0004-document-intake-and-field-provenance.md) |
 | CI explanation (RU) | [CI/CD](docs/CI_CD.md) |
 | Work completed and check evidence (RU) | [Development log](docs/DEVELOPMENT_LOG.md), [verification](docs/VERIFICATION.md) |
 | Machine-readable status and future PDF guides | [Verification JSON](docs/guide/verification.json), [guide policy](docs/guide/README.md) |

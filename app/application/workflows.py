@@ -126,6 +126,37 @@ def _version_request(
     }
 
 
+def append_version(
+    business_id: str,
+    digest: str,
+    current: VersionRef | None,
+    add: Callable[[VersionRef], None],
+) -> VersionRef:
+    """Inside a transaction: reuse identical latest content or add the next number."""
+    if current is not None and current.content_hash == digest:
+        return current
+    ref = VersionRef(
+        version_id=uuid4(),
+        business_id=business_id,
+        version_no=1 if current is None else current.version_no + 1,
+        content_hash=digest,
+    )
+    add(ref)
+    return ref
+
+
+def append_invoice_version(
+    repository: WorkflowRepository, invoice: Invoice
+) -> VersionRef:
+    """Record invoice content in the caller's transaction; documents reuse this."""
+    return append_version(
+        invoice.invoice_id,
+        content_hash(invoice),
+        repository.latest_invoice_version(invoice.invoice_id),
+        lambda ref: repository.add_invoice_version(Versioned(ref, invoice)),
+    )
+
+
 class WorkflowService:
     """Coordinate domain commands with one transaction per command."""
 
@@ -138,48 +169,41 @@ class WorkflowService:
     def record_invoice(self, invoice: Invoice) -> VersionRef:
         """Store invoice content, reusing the latest version if it is identical."""
         _require_type(invoice, Invoice, "invoice")
-        return self._record_version(
-            invoice.invoice_id,
-            content_hash(invoice),
-            lambda repository: repository.latest_invoice_version(invoice.invoice_id),
-            lambda repository, ref: repository.add_invoice_version(
-                Versioned(ref, invoice)
-            ),
+        return self._in_new_transaction(
+            lambda repository: append_invoice_version(repository, invoice)
         )
 
     def record_purchase_order(self, purchase_order: PurchaseOrder) -> VersionRef:
         """Store purchase order content; a change creates the next version."""
         _require_type(purchase_order, PurchaseOrder, "purchase_order")
         business_id = purchase_order.purchase_order_id
-        return self._record_version(
-            business_id,
-            content_hash(purchase_order),
-            lambda repository: repository.latest_purchase_order_version(business_id),
-            lambda repository, ref: repository.add_purchase_order_version(
-                Versioned(ref, purchase_order)
-            ),
+        return self._in_new_transaction(
+            lambda repository: append_version(
+                business_id,
+                content_hash(purchase_order),
+                repository.latest_purchase_order_version(business_id),
+                lambda ref: repository.add_purchase_order_version(
+                    Versioned(ref, purchase_order)
+                ),
+            )
         )
 
     def record_policy(self, policy: ValidationPolicy) -> VersionRef:
         """Store validation policy data; a changed allowlist is a new version."""
         _require_type(policy, ValidationPolicy, "policy")
-        return self._record_version(
-            policy.policy_id,
-            content_hash(policy),
-            lambda repository: repository.latest_policy_version(policy.policy_id),
-            lambda repository, ref: repository.add_policy_version(
-                Versioned(ref, policy)
-            ),
+        return self._in_new_transaction(
+            lambda repository: append_version(
+                policy.policy_id,
+                content_hash(policy),
+                repository.latest_policy_version(policy.policy_id),
+                lambda ref: repository.add_policy_version(Versioned(ref, policy)),
+            )
         )
 
-    def _record_version(
-        self,
-        business_id: str,
-        digest: str,
-        latest: Callable[[WorkflowRepository], VersionRef | None],
-        add: Callable[[WorkflowRepository, VersionRef], None],
+    def _in_new_transaction(
+        self, append: Callable[[WorkflowRepository], VersionRef]
     ) -> VersionRef:
-        """Append a version unless content equals the latest one.
+        """Run one version append per transaction, retrying a lost number race.
 
         Two writers can choose the same next number. The unique constraint lets
         only one commit; the other retries and then sees the winner's version.
@@ -187,16 +211,7 @@ class WorkflowService:
         for _attempt in range(_VERSION_ATTEMPTS):
             try:
                 with self._unit_of_work() as unit:
-                    current = latest(unit.repository)
-                    if current is not None and current.content_hash == digest:
-                        return current
-                    ref = VersionRef(
-                        version_id=uuid4(),
-                        business_id=business_id,
-                        version_no=1 if current is None else current.version_no + 1,
-                        content_hash=digest,
-                    )
-                    add(unit.repository, ref)
+                    ref = append(unit.repository)
                     unit.commit()
                     return ref
             except ConcurrentWriteError:

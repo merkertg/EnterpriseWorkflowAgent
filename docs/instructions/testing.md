@@ -65,6 +65,17 @@ idempotent replay and key reuse, concurrent duplicates and competing commands,
 preserved historical snapshots, a new connection pool and the demo CLI in
 separate processes.
 
+Stage 04 tests add intake limits and rejection codes, the field schema and
+evidence verification (including a fabricating extractor), exact parser
+offsets, synonyms, ambiguity and ignored instruction text, the isolated PDF
+worker (pages, encryption, malformed input, missing text, a killed slow worker,
+unusable answers), reproducible samples and the documents CLI. Their
+PostgreSQL tests cover storage, re-upload reuse, a shared invoice version,
+review-only incomplete extractions, no writes on refusal, starting a workflow
+from an extraction, tamper detection, concurrent uploads and the CLI in
+separate processes. PDF tests start short-lived Python subprocesses; no extra
+service is needed.
+
 Run the fictional scenarios directly with
 `uv run --locked python -m app.demo`; see [domain usage](domain.md). A successful
 basic check does not prove detailed reconciliation or authenticated approval.
