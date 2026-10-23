@@ -12,8 +12,10 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.application.access import Principal
+from app.application.agent import AgentRunResult
 from app.application.documents import IngestResult
 from app.application.ports import (
+    AgentRunRecord,
     AuditEvent,
     CommandResult,
     OutboxEvent,
@@ -379,3 +381,87 @@ class OutboxEventResponse(BaseModel):
             payload=event.payload,
             created_at=event.created_at,
         )
+
+
+class AgentStepResponse(BaseModel):
+    """One trace entry: names, codes, sizes and timing, never content."""
+
+    seq: int
+    kind: str
+    tool_name: str | None
+    error_code: str | None
+    result_bytes: int | None
+    duration_ms: int
+
+
+class AgentRunResponse(BaseModel):
+    """An agent run: outcome, checked draft and trace.
+
+    ``explanation`` is returned only by the request that ran the agent; it is
+    not stored, so reading the run later shows only its hash and length.
+    """
+
+    run_id: UUID
+    workflow_id: str
+    actor_id: str
+    provider: str
+    stop_reason: str
+    provider_calls: int
+    tool_calls: int
+    refused_calls: int
+    proposed_next_step: str | None
+    next_step: str | None
+    override_reason: str | None
+    explanation: str | None
+    explanation_sha256: str | None
+    explanation_chars: int | None
+    cited_codes: list[str]
+    steps: list[AgentStepResponse]
+    started_at: datetime | None
+    finished_at: datetime | None
+
+    @classmethod
+    def of(
+        cls,
+        record: AgentRunRecord,
+        explanation: str | None = None,
+        cited_codes: tuple[str, ...] = (),
+    ) -> "AgentRunResponse":
+        """Copy a stored run, optionally with the explanation just produced."""
+        return cls(
+            run_id=record.run_id,
+            workflow_id=record.workflow_id,
+            actor_id=record.actor_id,
+            provider=record.provider,
+            stop_reason=record.stop_reason.value,
+            provider_calls=record.provider_calls,
+            tool_calls=record.tool_calls,
+            refused_calls=record.refused_calls,
+            proposed_next_step=None
+            if record.proposed_next_step is None
+            else record.proposed_next_step.value,
+            next_step=None if record.next_step is None else record.next_step.value,
+            override_reason=record.override_reason,
+            explanation=explanation,
+            explanation_sha256=record.explanation_sha256,
+            explanation_chars=record.explanation_chars,
+            cited_codes=list(cited_codes),
+            steps=[
+                AgentStepResponse(
+                    seq=step.seq,
+                    kind=step.kind.value,
+                    tool_name=step.tool_name,
+                    error_code=step.error_code,
+                    result_bytes=step.result_bytes,
+                    duration_ms=step.duration_ms,
+                )
+                for step in record.steps
+            ],
+            started_at=record.started_at,
+            finished_at=record.finished_at,
+        )
+
+    @classmethod
+    def of_result(cls, result: AgentRunResult) -> "AgentRunResponse":
+        """Copy a fresh run including its explanation."""
+        return cls.of(result.record, result.explanation, result.cited_codes)

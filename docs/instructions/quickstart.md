@@ -83,3 +83,6 @@ For Stage 06, create a fictional employee and token with
 the API with `Authorization: Bearer ...`, or run
 `uv run --locked python -m app.decisions_demo`; see [decisions](decisions.md)
 and [API usage](usage.md).
+
+For Stage 07, run `uv run --locked python -m app.agent_demo` (offline, no model
+key); see [agent](agent.md).

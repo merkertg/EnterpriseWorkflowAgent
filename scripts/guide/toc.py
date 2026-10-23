@@ -33,6 +33,9 @@ CONTENTS = [
     ("Одобрение по свежей сверке", "Approval on a fresh reconciliation"),
     ("HTTP API", "HTTP API"),
     ("Outbox и аудит решения", "Outbox and decision audit"),
+    ("Агент и его границы", "The agent and its bounds"),
+    ("Инструменты и отказы", "Tools and refusals"),
+    ("Черновик и трассировка", "Draft check and trace"),
     ("Шпаргалка команд", "Command cheat sheet"),
     ("Типичные ошибки", "Common errors"),
     ("Проверь себя", "Check yourself"),
@@ -47,6 +50,7 @@ STAGE_SECTIONS = {
     "04": range(13, 18),
     "05": range(18, 21),
     "06": range(21, 25),
+    "07": range(25, 28),
 }
 
 

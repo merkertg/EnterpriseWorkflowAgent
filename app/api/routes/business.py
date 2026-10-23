@@ -15,6 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from app.api.dependencies import ContextDep, PrincipalDep, ServicesDep
 from app.api.errors import DocumentTooLargeError
 from app.api.schemas.business import (
+    AgentRunResponse,
     ApproveRequest,
     AuditEventResponse,
     CommandResponse,
@@ -317,3 +318,23 @@ def outbox_events(
     """List decision events waiting for a future delivery worker."""
     events = services.workflows.outbox_events(workflow_id, actor=principal)
     return [OutboxEventResponse.of(event) for event in events]
+
+
+@router.post(
+    "/workflows/{workflow_id}/agent-runs",
+    response_model=AgentRunResponse,
+    tags=["agent"],
+)
+def run_agent(
+    workflow_id: WorkflowId, services: ServicesDep, principal: PrincipalDep
+) -> AgentRunResponse:
+    """Run the bounded review agent; its draft never changes the workflow."""
+    return AgentRunResponse.of_result(services.agent.run(workflow_id, actor=principal))
+
+
+@router.get("/agent-runs/{run_id}", response_model=AgentRunResponse, tags=["agent"])
+def get_agent_run(
+    run_id: UUID, services: ServicesDep, principal: PrincipalDep
+) -> AgentRunResponse:
+    """Return a stored run and its trace; the explanation is not stored."""
+    return AgentRunResponse.of(services.agent.get_run(run_id, actor=principal))

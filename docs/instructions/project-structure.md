@@ -4,7 +4,7 @@
 
 Keep the initial application small and add a layer when it owns real behavior.
 
-## Implemented in Stages 01–06
+## Implemented in Stages 01–07
 
 | Location | Responsibility |
 | --- | --- |
@@ -33,6 +33,9 @@ Keep the initial application small and add a layer when it owns real behavior.
 | `app/application/access.py` | Roles, permissions, `Principal`, `authorize`, token generation and hashing |
 | `app/application/users.py` | `UserService` and `current_principal` (rights re-read inside a transaction) |
 | `app/application/versions.py` | Version appends and advisory lock keys |
+| `app/application/agent_protocol.py` | Model-provider port, turn shapes and strict schema validation |
+| `app/application/agent.py` | `AgentService`: bounded loop, refusals, `review_draft`, traces |
+| `app/application/agent_tools.py` | Four read-only agent tools with per-call rights checks |
 | `app/application/documents.py` | `prepare_document`, `DocumentService`: intake, storage and evidence |
 | `app/application/reconciliation.py` | `ReconciliationService`: snapshots, inputs hash, freshness, reproduction, reports |
 | `app/infrastructure/db/models.py` | SQLAlchemy tables, `NUMERIC` columns and check constraints |
@@ -40,10 +43,13 @@ Keep the initial application small and add a layer when it owns real behavior.
 | `app/infrastructure/db/documents.py` | PostgreSQL document repository |
 | `app/infrastructure/db/reconciliations.py` | PostgreSQL storage for rule versions and reconciliation snapshots |
 | `app/infrastructure/db/users.py` | PostgreSQL storage for employees and token hashes |
+| `app/infrastructure/db/agent_runs.py` | PostgreSQL storage for agent runs and trace steps |
 | `app/infrastructure/db/inserts.py` | Immediate inserts and constraint-race translation |
 | `app/infrastructure/db/unit_of_work.py` | One session per command, shared by all repositories |
 | `app/infrastructure/documents/` | Text decoding and the isolated `python -I` PDF worker |
 | `app/infrastructure/extraction/labeled_text.py` | Deterministic `Label: value` field extractor |
+| `app/infrastructure/extraction/model_fields.py` | `ModelFieldExtractor`: fields proposed by a model provider |
+| `app/infrastructure/llm/` | Deterministic providers: `DemoRulesProvider`, `ScriptedProvider` |
 | `app/infrastructure/db/session.py` | URL validation, test-database guard, engine and service composition |
 | `app/persistence_demo.py` | Fictional PostgreSQL scenario and `show` command |
 | `app/samples.py` | Fictional text/PDF samples and a deterministic minimal PDF writer |
@@ -51,6 +57,7 @@ Keep the initial application small and add a layer when it owns real behavior.
 | `app/reconciliation_cli.py` | Reconciliation `demo` and `show` |
 | `app/users_cli.py` | Employee `create`, `token`, `revoke`, `deactivate`, `activate`, `list` |
 | `app/decisions_demo.py` | Fictional Stage 06 decision scenario and `show` |
+| `app/agent_demo.py` | Fictional offline Stage 07 agent scenarios and `show` |
 | `alembic.ini`, `migrations/` | Alembic configuration, environment and revisions |
 | `tests/` | Automated checks; `tests/persistence/` needs `TEST_DATABASE_URL` |
 | `scripts/check_docs.py` | Local Markdown link validation |
@@ -85,6 +92,8 @@ and services; without `DATABASE_URL` business endpoints answer 503.
 | `docs/STAGE_06.md` | Employee decisions, roles, tokens, locks and outbox walkthrough in Russian |
 | `docs/instructions/decisions.md` | Roles, account commands, approval checks, outbox and demo |
 | `docs/instructions/usage.md` | HTTP endpoints, authentication, idempotency and error codes |
+| `docs/STAGE_07.md` | Bounded agent, tools, limits, draft check and traces walkthrough in Russian |
+| `docs/instructions/agent.md` | Agent provider port, tools, limits, draft check, traces and demo |
 | `docs/instructions/` | Short operational instructions in English |
 | `docs/CI_CD.md` | CI configuration and limits of remote verification |
 | `docs/VERIFICATION.md` | Recorded command outcomes and limitations |
@@ -98,7 +107,7 @@ directories to create now:
 
 | Location | Add when needed for |
 | --- | --- |
-| `app/infrastructure/` (other adapters) | Model providers and outbox delivery |
+| `app/infrastructure/` (other adapters) | A real model provider adapter and outbox delivery |
 | `ui/` | A client that calls the API |
 | `evals/` | Versioned evaluation cases and independent expected results |
 

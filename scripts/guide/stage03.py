@@ -81,6 +81,14 @@ _TABLE_TEXT = {
         "Событие решения для следующего шага (этап 06)",
         "Decision event for the next step (stage 06)",
     ),
+    "agent_runs": (
+        "Запуск агента: итог, счётчики, хеш объяснения (этап 07)",
+        "Agent run: outcome, counters, explanation hash (stage 07)",
+    ),
+    "agent_steps": (
+        "Шаг трассировки без содержимого (этап 07)",
+        "Trace step without content (stage 07)",
+    ),
 }
 
 

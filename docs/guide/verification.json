@@ -1,19 +1,20 @@
 {
   "project": "enterprise-workflow-agent",
-  "stage": "06",
+  "stage": "07",
   "implemented_stages": [
     "01",
     "02",
     "03",
     "04",
     "05",
-    "06"
+    "06",
+    "07"
   ],
   "status": "implemented_locally_verified",
   "verified_on": "2026-10-23",
   "timezone": "Asia/Tashkent",
   "git": {
-    "base_commit": "247762f",
+    "base_commit": "1f8dd68",
     "base_commit_pushed_to": "main",
     "scope": "uncommitted_working_tree",
     "committed": false,
@@ -39,16 +40,16 @@
     "postgresql": "18.3 (Homebrew, temporary cluster on 127.0.0.1:55433)"
   },
   "tests": {
-    "total": 392,
-    "postgres": 87,
+    "total": 465,
+    "postgres": 98,
     "with_database": {
-      "passed": 392,
+      "passed": 465,
       "failed": 0,
       "skipped": 0
     },
     "without_database": {
-      "passed": 305,
-      "skipped": 87
+      "passed": 367,
+      "skipped": 98
     }
   },
   "checks": [
@@ -67,26 +68,26 @@
     {
       "command": "uv run --locked ruff format --check .",
       "status": "passed",
-      "files": 144
+      "files": 162
     },
     {
       "command": "uv run --locked mypy app tests scripts migrations",
       "status": "passed",
-      "source_files": 115
+      "source_files": 130
     },
     {
       "command": "uv run --locked pytest",
       "database": "none",
       "status": "passed",
-      "passed": 305,
+      "passed": 367,
       "failed": 0,
-      "skipped": 87
+      "skipped": 98
     },
     {
       "command": "REQUIRE_TEST_DATABASE=1 TEST_DATABASE_URL=... uv run --locked pytest",
       "database": "enterprise_workflow_test",
       "status": "passed",
-      "passed": 392,
+      "passed": 465,
       "failed": 0,
       "skipped": 0
     },
@@ -94,23 +95,17 @@
       "command": "uv run --locked pytest -m postgres",
       "database": "enterprise_workflow_test",
       "status": "passed",
-      "passed": 87,
-      "deselected": 305
+      "passed": 98,
+      "deselected": 367
     },
     {
       "command": "uv run --locked alembic upgrade head",
       "status": "passed",
-      "revision": "0004"
+      "revision": "0005"
     },
     {
-      "command": "uv run --locked alembic downgrade 0003 && uv run --locked alembic upgrade head",
+      "command": "uv run --locked alembic downgrade 0004 && uv run --locked alembic upgrade head",
       "status": "passed"
-    },
-    {
-      "command": "alembic upgrade head over rows written by Stage 05 code",
-      "status": "passed",
-      "business_unit": "unassigned",
-      "server_default_left": false
     },
     {
       "command": "uv run --locked alembic check",
@@ -120,7 +115,12 @@
     {
       "command": "uv run --locked alembic upgrade head --sql",
       "status": "passed",
-      "create_table_statements": 20
+      "create_table_statements": 22
+    },
+    {
+      "command": "uv run --locked python -m app.agent_demo",
+      "status": "passed",
+      "network": false
     },
     {
       "command": "uv run --locked python -m app.decisions_demo",
@@ -146,8 +146,8 @@
       "command": "uv run --locked --group guide python scripts/build_guide.py",
       "status": "passed",
       "pages": {
-        "ru": 29,
-        "en": 29
+        "ru": 32,
+        "en": 32
       }
     },
     {
@@ -158,8 +158,8 @@
     {
       "command": "uv run --locked python scripts/check_docs.py",
       "status": "passed",
-      "links": 222,
-      "files": 29,
+      "links": 249,
+      "files": 32,
       "scope": "local_inline_markdown_target_files_only"
     },
     {
@@ -169,20 +169,17 @@
   ],
   "http_smoke": {
     "status": "passed",
-    "checked_stage": "06",
+    "checked_stage": "07",
     "repeated_since": false,
     "server": "uvicorn app.main:app on 127.0.0.1:8003 with DATABASE_URL",
     "endpoints": {
       "/health": 200,
-      "/docs": 200,
-      "/redoc": 200,
-      "/openapi.json": 200,
-      "GET /me without token": 401,
-      "GET /me with viewer token": 200,
-      "GET /workflows/{id} (viewer, own unit)": 200,
-      "GET /workflows/{id}/outbox": 200,
-      "POST /workflows/{id}/approve (viewer)": 403
-    }
+      "POST /workflows/{id}/agent-runs without token": 401,
+      "POST /workflows/{id}/agent-runs (clerk)": 200,
+      "GET /agent-runs/{run_id} (clerk)": 200,
+      "GET /workflows/{id} after the run": 200
+    },
+    "result": "final_answer, ready_for_approval, demo-rules/1; stored run has no explanation; workflow still awaiting_approval v2"
   },
   "remote_ci": {
     "status": "not_verified",
@@ -192,11 +189,17 @@
       "cbebe08",
       "8b697f7",
       "00eb76e",
-      "247762f"
+      "247762f",
+      "1f8dd68"
     ]
   },
   "real_llm": {
-    "status": "not_implemented"
+    "status": "not_connected",
+    "providers": [
+      "demo-rules/1 (rule-based)",
+      "ScriptedProvider (tests and demo)"
+    ],
+    "network": false
   },
   "documents": {
     "status": "implemented_locally_verified",
@@ -235,10 +238,11 @@
       "0001",
       "0002",
       "0003",
-      "0004"
+      "0004",
+      "0005"
     ],
-    "tables": 19,
-    "append_only_tables": 16,
+    "tables": 21,
+    "append_only_tables": 18,
     "stale_version_detection": "implemented_stage_05",
     "existing_workflows_unit": "unassigned"
   },
@@ -278,23 +282,23 @@
       "docs/guide/enterprise-workflow-agent-guide-en.pdf"
     ],
     "pages": {
-      "ru": 29,
-      "en": 29
+      "ru": 32,
+      "en": 32
     },
-    "sections": 28,
+    "sections": 31,
     "generator": "scripts/build_guide.py",
     "reportlab": "4.4.9 (uv dependency group guide)",
     "fonts": "PT Sans / PT Mono (macOS)",
     "freshness_check": "source-sha256 in PDF keywords, tests/test_guide_pdfs.py",
-    "visual_check": "all 58 pages after the final build",
+    "visual_check": "all 64 pages; cover and changed pages re-checked after the final build",
     "linux_build": "not_verified"
   },
-  "next_stage": "07",
+  "next_stage": "08",
   "repeated_runs": {
     "files": [
-      "tests/persistence/test_decisions.py",
-      "tests/persistence/test_concurrency.py",
-      "tests/persistence/test_api.py"
+      "tests/persistence/test_agent.py",
+      "tests/application/test_agent_runner.py",
+      "tests/persistence/test_decisions.py"
     ],
     "runs": 8,
     "failures": 0
@@ -319,5 +323,34 @@
     "approval_gate": "implemented_stage_06",
     "new_tests_without_database": 18,
     "new_tests_with_database": 13
+  },
+  "agent": {
+    "status": "implemented_locally_verified_with_deterministic_providers",
+    "provider_port": "ModelProvider.complete(ModelRequest) -> ModelTurn (tool_calls | final | refusal)",
+    "tools": [
+      "get_workflow",
+      "get_reconciliation",
+      "get_extracted_fields",
+      "get_audit_trail"
+    ],
+    "write_tools": false,
+    "limits": {
+      "max_provider_calls": 6,
+      "max_tool_calls": 10,
+      "max_refused_calls": 3,
+      "provider_timeout_seconds": 20.0,
+      "tool_timeout_seconds": 5.0,
+      "max_result_bytes": 8192
+    },
+    "permission": "assist (clerk, approver)",
+    "draft_check": "review_draft against stored facts; only lowers to needs_human_review",
+    "trace": "agent_runs + agent_steps, append-only; codes, sizes, durations, SHA-256; no prompts, document text or explanation",
+    "model_field_extractor": "ModelFieldExtractor behind FieldExtractor; evidence check unchanged",
+    "http": [
+      "POST /workflows/{id}/agent-runs",
+      "GET /agent-runs/{run_id}"
+    ],
+    "new_tests_without_database": 62,
+    "new_tests_with_database": 11
   }
 }

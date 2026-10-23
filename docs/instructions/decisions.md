@@ -11,13 +11,14 @@ and the audit event commit together. All accounts and data are fictional.
 
 ## Roles and business units
 
-| Role | view | submit | reconcile | decide |
-| --- | --- | --- | --- | --- |
-| `viewer` | yes | — | — | — |
-| `clerk` | yes | yes | yes | — |
-| `approver` | yes | — | yes | yes |
+| Role | view | submit | reconcile | decide | assist |
+| --- | --- | --- | --- | --- | --- |
+| `viewer` | yes | — | — | — | — |
+| `clerk` | yes | yes | yes | — | yes |
+| `approver` | yes | — | yes | yes | yes |
 
-`submit` covers document upload, start, check and revise. A user may hold
+`submit` covers document upload, start, check and revise. `assist` (added
+in Stage 07) starts the review agent; see [agent](agent.md). A user may hold
 several roles. Every workflow belongs to one business unit, chosen at start
 from the caller's own units. A workflow in another unit is reported as
 `not_found`; a missing permission in the caller's unit is

@@ -3,6 +3,7 @@
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from decimal import Decimal
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,6 +20,8 @@ from app.domain.documents import DocumentLimits
 from app.domain.models import LineItem
 from app.domain.money import Currency, Money
 from app.domain.rules import ValidationPolicy
+from app.infrastructure.db.session import build_agent_service
+from app.infrastructure.llm.demo import DemoRulesProvider
 from app.main import create_app
 from app.samples import invoice_text
 from tests.persistence.conftest import UNIT, USD_RULES, employee
@@ -90,6 +93,7 @@ def api(
         documents=document_service,
         reconciliations=reconciliation_service,
         users=user_service,
+        agent=build_agent_service(engine, DemoRulesProvider()),
         max_document_bytes=DocumentLimits().max_bytes,
     )
     with TestClient(create_app(Settings(), services=services)) as client:
@@ -188,7 +192,7 @@ def test_tokens_are_required_and_resolve_to_current_rights(api: Api) -> None:
         "user_id": "approver-1",
         "roles": ["approver"],
         "units": [UNIT],
-        "permissions": ["decide", "reconcile", "view"],
+        "permissions": ["assist", "decide", "reconcile", "view"],
         "_status": 200,
     }
 
@@ -358,3 +362,47 @@ def test_start_in_a_foreign_unit_is_forbidden(api: Api) -> None:
         },
     )
     assert _error(body) == (403, "missing_permission")
+
+
+def test_agent_run_over_http(api: Api) -> None:
+    """Clerks run the agent; viewers read the trace; nothing else changes."""
+    _submit(api, "WF-API-1", "INV-API-1")
+    run = api.call("post", "/workflows/WF-API-1/agent-runs", "clerk")
+    assert isinstance(run, dict) and run["_status"] == 200
+    assert (run["stop_reason"], run["next_step"], run["provider"]) == (
+        "final_answer",
+        "ready_for_approval",
+        "demo-rules/1",
+    )
+    assert isinstance(run["explanation"], str) and run["explanation_sha256"]
+    steps: Any = run["steps"]
+    assert [step["kind"] for step in steps] == [
+        "provider_call",
+        "tool_call",
+        "tool_call",
+        "provider_call",
+        "final_answer",
+    ]
+    stored = api.call("get", f"/agent-runs/{run['run_id']}", "viewer")
+    assert isinstance(stored, dict) and stored["_status"] == 200
+    assert stored["explanation"] is None
+    assert stored["explanation_sha256"] == run["explanation_sha256"]
+    assert _error(api.call("get", f"/agent-runs/{run['run_id']}", "outsider")) == (
+        404,
+        "not_found",
+    )
+    assert _error(api.call("post", "/workflows/WF-API-1/agent-runs", "viewer")) == (
+        403,
+        "missing_permission",
+    )
+    assert _error(api.call("post", "/workflows/WF-API-1/agent-runs", "outsider")) == (
+        404,
+        "not_found",
+    )
+    workflow = api.call("get", "/workflows/WF-API-1", "viewer")
+    assert isinstance(workflow, dict)
+    assert (workflow["state"], workflow["version"], workflow["decision"]) == (
+        "awaiting_approval",
+        2,
+        None,
+    )

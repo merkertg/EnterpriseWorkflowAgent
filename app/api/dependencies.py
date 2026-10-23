@@ -13,6 +13,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.api.errors import DatabaseNotConfiguredError
 from app.application.access import Principal
+from app.application.agent import AgentService
 from app.application.documents import DocumentService
 from app.application.errors import UnauthenticatedError
 from app.application.ports import CommandContext
@@ -36,6 +37,7 @@ class Services:
     documents: DocumentService
     reconciliations: ReconciliationService
     users: UserService
+    agent: AgentService
     max_document_bytes: int
 
 

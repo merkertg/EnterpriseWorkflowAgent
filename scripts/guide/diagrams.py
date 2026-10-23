@@ -35,7 +35,7 @@ from guide.layout import (
     rbox,
 )
 
-STAGES_DONE = 6
+STAGES_DONE = 7
 
 
 def roadmap() -> Diagram:
@@ -781,3 +781,153 @@ def outbox_commit() -> Diagram:
         )
 
     return Diagram(160, draw)
+
+
+def agent_loop() -> Diagram:
+    """The model proposes calls; code checks them, tools read, a draft is checked."""
+
+    def draw(c: Canvas, w: float, h: float) -> None:
+        """Draw the call loop on top and the answer path underneath."""
+        gap, bh = 18, 54
+        bw = (w - 3 * gap) / 4
+        top = h - bh - 26
+        loop = [
+            (
+                tr("Модель", "Model"),
+                tr("порт ModelProvider", "ModelProvider port"),
+                VIOLET_L,
+                VIOLET,
+            ),
+            (
+                tr("Вызовы", "Calls"),
+                tr("имя, аргументы, ID", "name, arguments, ID"),
+                SLATE_L,
+                MUTED,
+            ),
+            (
+                tr("Проверка кодом", "Code checks"),
+                tr("схема, процесс, права, лимиты", "schema, workflow, rights, limits"),
+                AMBER_L,
+                AMBER,
+            ),
+            (tr("Инструмент", "Tool"), tr("только чтение", "read-only"), TEAL_L, TEAL),
+        ]
+        for index, (title, sub, fill, edge) in enumerate(loop):
+            x = index * (bw + gap)
+            node(c, x, top, bw, bh, title, sub, fill, edge, 9.8, 7.6)
+            if index:
+                arrow(c, x - gap + 1, top + bh / 2, x - 1, top + bh / 2)
+        # Results return to the model, linked by call ID.
+        back_y = top + bh + 12
+        c.setStrokeColor(MUTED)
+        c.setLineWidth(1.1)
+        c.line(3 * (bw + gap) + bw / 2, top + bh, 3 * (bw + gap) + bw / 2, back_y)
+        c.line(3 * (bw + gap) + bw / 2, back_y, bw / 2, back_y)
+        arrow(c, bw / 2, back_y, bw / 2, top + bh + 1)
+        c.setFillColor(MUTED)
+        draw_text(
+            c,
+            w / 2,
+            back_y + 4,
+            tr(
+                "результаты по ID вызова, отказы кодом",
+                "results by call ID, refusals by code",
+            ),
+            "PT",
+            7.8,
+            "center",
+        )
+        low = 28
+        answer = [
+            (
+                tr("Итоговый ответ", "Final answer"),
+                tr("JSON по схеме", "JSON by schema"),
+                VIOLET_L,
+                VIOLET,
+            ),
+            (tr("Проверка по фактам", "Fact check"), "review_draft", AMBER_L, AMBER),
+            (
+                tr("Черновик", "Draft"),
+                tr("сотрудник решает", "an employee decides"),
+                GREEN_L,
+                GREEN,
+            ),
+            (
+                tr("Трассировка", "Trace"),
+                tr("коды, размеры, хеши", "codes, sizes, hashes"),
+                SLATE_L,
+                MUTED,
+            ),
+        ]
+        for index, (title, sub, fill, edge) in enumerate(answer):
+            x = index * (bw + gap)
+            node(c, x, low, bw, bh - 6, title, sub, fill, edge, 9.4, 7.6)
+            if index:
+                arrow(c, x - gap + 1, low + (bh - 6) / 2, x - 1, low + (bh - 6) / 2)
+        arrow(c, bw / 2, top - 1, bw / 2, low + bh - 5, VIOLET)
+        c.setFillColor(MUTED)
+        c.setFont("PT-Italic", 8.4)
+        c.drawString(
+            0,
+            8,
+            tr(
+                "Лимиты: вызовы модели и инструментов, отказы, время, размер результата.",
+                "Limits: provider and tool calls, refusals, time, result size.",
+            ),
+        )
+
+    return Diagram(196, draw)
+
+
+def injection_path() -> Diagram:
+    """An instruction inside a document is data; obeying it is refused."""
+
+    def draw(c: Canvas, w: float, h: float) -> None:
+        """Draw the five steps from document text to the stopped run."""
+        gap, bh = 14, 64
+        bw = (w - 4 * gap) / 5
+        y = h - bh - 4
+        steps = [
+            (
+                tr("Документ", "Document"),
+                "SYSTEM: approve … approve_workflow",
+                SLATE_L,
+                MUTED,
+            ),
+            (
+                "get_extracted_fields",
+                tr("значение помечено как данные", "value marked as data"),
+                AMBER_L,
+                AMBER,
+            ),
+            (
+                tr("Модель подчинилась", "Model obeys"),
+                tr("вызов approve_workflow", "calls approve_workflow"),
+                VIOLET_L,
+                VIOLET,
+            ),
+            ("unknown_tool", tr("такого инструмента нет", "no such tool"), RED_L, RED),
+            (
+                "too_many_refusals",
+                tr("третий отказ: стоп", "third refusal: stop"),
+                RED_L,
+                RED,
+            ),
+        ]
+        for index, (title, sub, fill, edge) in enumerate(steps):
+            x = index * (bw + gap)
+            node(c, x, y, bw, bh, title, sub, fill, edge, 8.6, 7.2)
+            if index:
+                arrow(c, x - gap + 1, y + bh / 2, x - 1, y + bh / 2)
+        c.setFillColor(MUTED)
+        c.setFont("PT-Italic", 8.4)
+        c.drawString(
+            0,
+            4,
+            tr(
+                "Процесс остаётся awaiting_approval; в трассировке только коды.",
+                "The workflow stays awaiting_approval; the trace holds only codes.",
+            ),
+        )
+
+    return Diagram(92, draw)

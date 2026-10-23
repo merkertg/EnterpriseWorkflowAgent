@@ -63,6 +63,8 @@ result with `"replayed": true`; the same key with other arguments is
 | `POST /workflows/{id}/reject` | `decide` | `expected_version`, `reason` |
 | `GET /workflows/{id}/audit` | `view` | Audit events with actor, snapshot and outbox references |
 | `GET /workflows/{id}/outbox` | `view` | Stored decision events |
+| `POST /workflows/{id}/agent-runs` | `assist` | Run the bounded review agent (provider `demo-rules/1`); returns the explanation once, the checked draft and the trace |
+| `GET /agent-runs/{run_id}` | `view` | A stored run and trace; the explanation is not stored, only its hash and length |
 
 Request bodies reject unknown fields and use strict types (`"2"` is not a
 version). Uploads are read only up to 1 MiB; a larger body is `413 too_large`.
@@ -102,4 +104,5 @@ including the bearer scheme and the `Idempotency-Key` header.
 
 Command-line tools remain available: [domain](domain.md),
 [persistence](persistence.md), [documents](documents.md),
-[reconciliation](reconciliation.md) and [decisions](decisions.md).
+[reconciliation](reconciliation.md), [decisions](decisions.md) and
+[agent](agent.md).

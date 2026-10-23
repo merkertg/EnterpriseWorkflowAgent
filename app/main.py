@@ -16,12 +16,14 @@ from app.api.routes.health import router as health_router
 from app.config import Settings, get_settings
 from app.domain.documents import DocumentLimits
 from app.infrastructure.db.session import (
+    build_agent_service,
     build_document_service,
     build_reconciliation_service,
     build_user_service,
     build_workflow_service,
     create_database_engine,
 )
+from app.infrastructure.llm.demo import DemoRulesProvider
 
 
 def build_services(settings: Settings) -> tuple[Services | None, Engine | None]:
@@ -39,6 +41,8 @@ def build_services(settings: Settings) -> tuple[Services | None, Engine | None]:
         documents=build_document_service(engine, limits),
         reconciliations=build_reconciliation_service(engine),
         users=build_user_service(engine),
+        # Stage 07 offers only the deterministic offline provider over HTTP.
+        agent=build_agent_service(engine, DemoRulesProvider()),
         max_document_bytes=limits.max_bytes,
     )
     return services, engine

@@ -35,6 +35,7 @@ from guide.stage03 import add_stage03
 from guide.stage04 import add_stage04
 from guide.stage05 import add_stage05
 from guide.stage06 import add_stage06
+from guide.stage07 import add_stage07
 from guide.toc import section
 
 _REMOTE = {
@@ -87,8 +88,8 @@ def _overview(story: list[Any]) -> None:
                 (
                     tr("Модель предлагает", "A model proposes"),
                     tr(
-                        "Будущий AI только предлагает поля; каждое значение проверяется по цитате.",
-                        "A future AI only proposes fields; every value is checked against its citation.",
+                        "Модель (пока подставная) лишь предлагает поля и черновик; код проверяет.",
+                        "A model (a substitute for now) only proposes fields and drafts; code checks.",
                     ),
                     VIOLET,
                     VIOLET_L,
@@ -150,6 +151,13 @@ def _overview(story: list[Any]) -> None:
                     tr(
                         "Токены, роли, подразделения, HTTP API, одобрение по свежей сверке, outbox",
                         "Tokens, roles, units, HTTP API, approval on fresh reconciliation, outbox",
+                    ),
+                ],
+                [
+                    "07",
+                    tr(
+                        "Агент с инструментами чтения, лимитами, проверкой черновика и трассировкой",
+                        "Agent with read-only tools, limits, draft check and trace",
                     ),
                 ],
             ],
@@ -230,6 +238,7 @@ def _cheat_sheet(story: list[Any]) -> None:
             tr("Сотрудники и токены", "Employees and tokens"),
         ),
         ("... decisions_demo", tr("Демонстрация этапа 06", "Stage 06 demo")),
+        ("... agent_demo", tr("Агент этапа 07, без сети", "Stage 07 agent, offline")),
         ("uv run --locked ruff check .", tr("Линтер", "Linter")),
         (
             "uv run --locked mypy app tests scripts migrations",
@@ -388,6 +397,20 @@ def _common_errors(story: list[Any]) -> None:
             ),
         ),
         (
+            mono("too_many_refusals"),
+            tr(
+                "Модель трижды вызвала запрещённое; смотри трассировку",
+                "The model called forbidden things three times; read the trace",
+            ),
+        ),
+        (
+            tr("next_step ≠ proposed_next_step", "next_step ≠ proposed_next_step"),
+            tr(
+                "Черновик не подтвердился фактами; см. override_reason",
+                "Facts did not support the draft; see override_reason",
+            ),
+        ),
+        (
             mono("503 database_not_configured"),
             tr(
                 "Задай DATABASE_URL и перезапусти API",
@@ -486,6 +509,14 @@ def _questions(story: list[Any]) -> None:
             "Why can't a command send the outbox event itself?",
         ),
         tr(
+            "Почему у агента нет инструмента одобрения?",
+            "Why does the agent have no approval tool?",
+        ),
+        tr(
+            "Почему проверка черновика может только понизить шаг?",
+            "Why can the draft check only lower the next step?",
+        ),
+        tr(
             "Что пока не защищено и на каком этапе это появится?",
             "What is not protected yet, and in which stage will it be?",
         ),
@@ -576,12 +607,13 @@ def _results(story: list[Any], verification: dict[str, Any]) -> None:
         Spacer(1, 6),
         callout(
             tr(
-                "Не реализовано: модель (07), интерфейс (08), лимит памяти "
-                "PDF-процесса и доставка outbox (09), Docker-выпуск (10). Срок "
-                "действия токенов, SSO и управление ролями через HTTP — вне объёма.",
-                "Not implemented: a model (07), a UI (08), a PDF worker memory limit "
-                "and outbox delivery (09), Docker release (10). Token expiry, SSO and "
-                "role management over HTTP are out of scope.",
+                "Не реализовано: адаптер настоящей LLM (07 работает с подставными "
+                "провайдерами), интерфейс (08), лимит памяти PDF-процесса и доставка "
+                "outbox (09), Docker-выпуск (10). Срок действия токенов и SSO — вне "
+                "объёма.",
+                "Not implemented: a real LLM adapter (07 runs substitute providers), "
+                "a UI (08), a PDF worker memory limit and outbox delivery (09), Docker "
+                "release (10). Token expiry and SSO are out of scope.",
             ),
             GREEN,
             GREEN_L,
@@ -599,6 +631,7 @@ def build_story(facts: Facts, verification: dict[str, Any]) -> list[Any]:
     add_stage04(story, facts)
     add_stage05(story, facts)
     add_stage06(story, facts)
+    add_stage07(story, facts)
     _cheat_sheet(story)
     _common_errors(story)
     _questions(story)

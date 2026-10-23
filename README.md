@@ -6,8 +6,9 @@ document, extract fields with source evidence, apply corporate rules, show
 discrepancies, obtain an employee's decision and record the next process step.
 All examples will use fictional data.
 
-**Current scope: Stages 01–06 — API foundation, domain, PostgreSQL storage,
-document intake, deterministic reconciliation and employee decisions.**
+**Current scope: Stages 01–07 — API foundation, domain, PostgreSQL storage,
+document intake, deterministic reconciliation, employee decisions and a
+bounded review agent.**
 The repository contains a FastAPI liveness endpoint, validated settings, exact
 money and purchasing models, seven basic validation reasons and an immutable
 workflow. Stage 03 persists it in PostgreSQL through Alembic migrations, with
@@ -21,11 +22,15 @@ rules and stores reproducible snapshots that become stale when the order or
 rules change. Stage 06 adds employees with bearer tokens, roles and business
 units, a business HTTP API with document upload, and approval that must cite a
 fresh matched reconciliation snapshot, with four-eyes checking and an outbox
-event written in the same transaction. Isolated tests,
+event written in the same transaction. Stage 07 adds a bounded review agent
+behind a model-provider port: read-only tools with strict schemas and rights
+checks, limits on calls, time and result size, a check of the drafted next
+step against stored facts, and a trace without document text; it runs only
+deterministic offline providers. Isolated tests,
 PostgreSQL integration tests, Ruff, strict mypy, a locked environment and a
 GitHub Actions workflow cover this work. Actual results and unverified items are
-recorded in [verification](docs/VERIFICATION.md). An AI agent, a user
-interface and outbox delivery are planned.
+recorded in [verification](docs/VERIFICATION.md). A real model adapter, a
+user interface and outbox delivery are planned.
 
 The planned design is a modular monolith. Deterministic code calculates amounts,
 checks rules and controls state transitions. The AI assistant proposes fields and
@@ -33,14 +38,15 @@ explanations; authorized employees make approval decisions. The tutorial does no
 initiate payments or act on real corporate systems.
 
 **Visual guides:** [Russian PDF](docs/guide/enterprise-workflow-agent-guide.pdf)
-and [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf), 29 pages
-each, with diagrams for stages 01–06.
+and [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf), 32 pages
+each, with diagrams for stages 01–07.
 
 **По-русски:** основа API — [этап 01](docs/STAGE_01.md), предметная модель,
 правила и состояния — [этап 02](docs/STAGE_02.md), хранение, транзакции и
 аудит — [этап 03](docs/STAGE_03.md), документы и происхождение полей —
 [этап 04](docs/STAGE_04.md), сверка счёта с заказом — [этап 05](docs/STAGE_05.md),
-решение сотрудника, роли и outbox — [этап 06](docs/STAGE_06.md).
+решение сотрудника, роли и outbox — [этап 06](docs/STAGE_06.md),
+ограниченный AI-агент — [этап 07](docs/STAGE_07.md).
 Все этапы и критерии готовности — в [дорожной карте](docs/ROADMAP.md).
 
 ## Quickstart
@@ -180,7 +186,7 @@ uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8003
 ```
 
 Roles `viewer`, `clerk` and `approver` grant `view`, `submit`, `reconcile`
-and `decide` within the user's business units; another unit's workflow is
+and `decide` (and, since Stage 07, `assist`) within the user's business units; another unit's workflow is
 `404`. Tokens are shown once and stored as SHA-256; revocation and
 deactivation apply to the next request. Services re-check the user inside each
 command's transaction. Approval cites a reconciliation snapshot and is refused
@@ -192,6 +198,29 @@ audit event commit together; nothing delivers events yet (Stage 09). Commands
 need an `Idempotency-Key` header. See [decisions](docs/instructions/decisions.md)
 and [API usage](docs/instructions/usage.md).
 
+## Bounded review agent
+
+```bash
+uv run --locked python -m app.agent_demo
+uv run --locked python -m app.agent_demo show RUN_ID
+```
+
+A model behind the `ModelProvider` port may call four read-only tools
+(`get_workflow`, `get_reconciliation`, `get_extracted_fields`,
+`get_audit_trail`) and must answer with an explanation and one of four draft
+next steps. Code validates every call against a strict schema, keeps the
+agent to the run's workflow and the employee's rights, limits provider calls,
+tool calls, refusals, wall time and result size, and replaces an unsupported
+draft with `needs_human_review`. There is no approve, reject, pay or
+code-execution tool, and a draft never changes the workflow. Text from a
+document that tells the model to approve is refused as an unknown tool. The
+trace stores names, codes, sizes and hashes, not prompts, document text or the
+explanation. Stage 07 uses a rule-based demo provider and scripted providers
+only; no network or real model. `POST /workflows/{id}/agent-runs` needs the
+`assist` permission (clerks and approvers). `ModelFieldExtractor` lets a
+model propose fields through the Stage 04 port; the evidence check still
+applies. See [agent](docs/instructions/agent.md).
+
 ## Stages
 
 | Stage | Deliverable | Status |
@@ -202,7 +231,7 @@ and [API usage](docs/instructions/usage.md).
 | 04 | Safe text/PDF ingestion and fields with provenance | Implemented; verified locally |
 | 05 | Deterministic invoice reconciliation and discrepancy reports | Implemented; verified locally |
 | 06 | Employee approvals, roles and transactional outbox | Implemented; verified locally |
-| 07 | Bounded AI tools, demo provider and optional real model | Planned |
+| 07 | Bounded AI tools, demo provider and optional real model | Implemented with offline providers; no real model |
 | 08 | Streamlit interface through the HTTP API | Planned |
 | 09 | Security, failure scenarios, evals and local sandbox event delivery | Planned |
 | 10 | Docker, expanded CI and reproducible release | Planned |
@@ -240,9 +269,9 @@ not been verified.
 | Purpose | Source |
 | --- | --- |
 | Stage plan and completion criteria (RU) | [ROADMAP](docs/ROADMAP.md) |
-| Detailed learning guides (RU) | [STAGE 01](docs/STAGE_01.md), [STAGE 02](docs/STAGE_02.md), [STAGE 03](docs/STAGE_03.md), [STAGE 04](docs/STAGE_04.md), [STAGE 05](docs/STAGE_05.md), [STAGE 06](docs/STAGE_06.md) |
-| Short task instructions (EN) | [Quickstart](docs/instructions/quickstart.md), [API](docs/instructions/usage.md), [domain](docs/instructions/domain.md), [persistence](docs/instructions/persistence.md), [documents](docs/instructions/documents.md), [reconciliation](docs/instructions/reconciliation.md), [decisions](docs/instructions/decisions.md), [testing](docs/instructions/testing.md), [project structure](docs/instructions/project-structure.md) |
-| Design and decisions (EN) | [Approach](docs/APPROACH.md), [ADR 0001](docs/adr/0001-modular-monolith-and-tooling.md), [ADR 0002](docs/adr/0002-domain-rules-and-workflow.md), [ADR 0003](docs/adr/0003-postgresql-persistence-audit-idempotency.md), [ADR 0004](docs/adr/0004-document-intake-and-field-provenance.md), [ADR 0005](docs/adr/0005-deterministic-reconciliation.md), [ADR 0006](docs/adr/0006-employee-decisions-and-outbox.md) |
+| Detailed learning guides (RU) | [STAGE 01](docs/STAGE_01.md), [STAGE 02](docs/STAGE_02.md), [STAGE 03](docs/STAGE_03.md), [STAGE 04](docs/STAGE_04.md), [STAGE 05](docs/STAGE_05.md), [STAGE 06](docs/STAGE_06.md), [STAGE 07](docs/STAGE_07.md) |
+| Short task instructions (EN) | [Quickstart](docs/instructions/quickstart.md), [API](docs/instructions/usage.md), [domain](docs/instructions/domain.md), [persistence](docs/instructions/persistence.md), [documents](docs/instructions/documents.md), [reconciliation](docs/instructions/reconciliation.md), [decisions](docs/instructions/decisions.md), [agent](docs/instructions/agent.md), [testing](docs/instructions/testing.md), [project structure](docs/instructions/project-structure.md) |
+| Design and decisions (EN) | [Approach](docs/APPROACH.md), [ADR 0001](docs/adr/0001-modular-monolith-and-tooling.md), [ADR 0002](docs/adr/0002-domain-rules-and-workflow.md), [ADR 0003](docs/adr/0003-postgresql-persistence-audit-idempotency.md), [ADR 0004](docs/adr/0004-document-intake-and-field-provenance.md), [ADR 0005](docs/adr/0005-deterministic-reconciliation.md), [ADR 0006](docs/adr/0006-employee-decisions-and-outbox.md), [ADR 0007](docs/adr/0007-bounded-review-agent.md) |
 | CI explanation (RU) | [CI/CD](docs/CI_CD.md) |
 | Work completed and check evidence (RU) | [Development log](docs/DEVELOPMENT_LOG.md), [verification](docs/VERIFICATION.md) |
 | Visual PDF guides (RU and EN) | [Russian PDF](docs/guide/enterprise-workflow-agent-guide.pdf), [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf), [how they are built](docs/guide/README.md) |

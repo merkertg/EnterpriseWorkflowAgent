@@ -14,7 +14,15 @@ from typing import Any
 from app.api.errors import ERROR_STATUS
 from app.api.routes.business import router as business_router
 from app.application.access import ROLE_PERMISSIONS, Permission
-from app.application.ports import CommandName, OutboxEventType
+from app.application.agent import AgentLimits
+from app.application.agent_tools import TOOL_SPECS
+from app.application.ports import (
+    AgentStepKind,
+    AgentStopReason,
+    CommandName,
+    NextStep,
+    OutboxEventType,
+)
 from app.application.reconciliation import StaleReason
 from app.domain.documents import DocumentLimits, RejectionCode
 from app.domain.extraction import (
@@ -73,6 +81,11 @@ class Facts:
     outbox_types: tuple[str, ...]
     routes: tuple[tuple[str, str], ...]
     error_statuses: tuple[tuple[str, int], ...]
+    agent_tools: tuple[tuple[str, tuple[str, ...]], ...]
+    agent_limits: AgentLimits
+    stop_reasons: tuple[str, ...]
+    next_steps: tuple[str, ...]
+    step_kinds: tuple[str, ...]
 
 
 def read_source(relative: str) -> str:
@@ -144,6 +157,13 @@ def load_facts() -> Facts:
             for method in sorted(getattr(route, "methods", ()))
         ),
         error_statuses=tuple((kind.code, status) for kind, status in ERROR_STATUS),
+        agent_tools=tuple(
+            (spec.name, tuple(spec.input_schema["properties"])) for spec in TOOL_SPECS
+        ),
+        agent_limits=AgentLimits(),
+        stop_reasons=tuple(item.value for item in AgentStopReason),
+        next_steps=tuple(item.value for item in NextStep),
+        step_kinds=tuple(item.value for item in AgentStepKind),
     )
 
 

@@ -30,7 +30,13 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.application.access import Role
-from app.application.ports import CommandName, OutboxEventType
+from app.application.ports import (
+    AgentStepKind,
+    AgentStopReason,
+    CommandName,
+    NextStep,
+    OutboxEventType,
+)
 from app.domain.documents import MediaType
 from app.domain.extraction import ExtractionStatus, FieldStatus
 from app.domain.money import Currency
@@ -70,6 +76,9 @@ FIELD_STATUS_VALUES = tuple(item.value for item in FieldStatus)
 RECONCILIATION_STATUS_VALUES = tuple(item.value for item in ReconciliationStatus)
 ROLE_VALUES = tuple(item.value for item in Role)
 OUTBOX_EVENT_VALUES = tuple(item.value for item in OutboxEventType)
+STOP_REASON_VALUES = tuple(item.value for item in AgentStopReason)
+STEP_KIND_VALUES = tuple(item.value for item in AgentStepKind)
+NEXT_STEP_VALUES = tuple(item.value for item in NextStep)
 
 
 class Base(DeclarativeBase):
@@ -590,6 +599,80 @@ class OutboxEventRow(Base):
     created_at: Mapped[datetime] = _created_at()
 
 
+class AgentRunRow(Base):
+    """A finished agent run; the explanation is stored only as hash and length."""
+
+    __tablename__ = "agent_runs"
+    __table_args__ = (
+        CheckConstraint(_one_of("stop_reason", STOP_REASON_VALUES), name="stop_reason"),
+        CheckConstraint(
+            "next_step IS NULL OR " + _one_of("next_step", NEXT_STEP_VALUES),
+            name="next_step",
+        ),
+        CheckConstraint(
+            "proposed_next_step IS NULL OR "
+            + _one_of("proposed_next_step", NEXT_STEP_VALUES),
+            name="proposed_next_step",
+        ),
+        CheckConstraint(
+            "provider_calls >= 0 AND tool_calls >= 0 AND refused_calls >= 0",
+            name="counts_non_negative",
+        ),
+        CheckConstraint(
+            f"explanation_sha256 IS NULL OR explanation_sha256 ~ {HASH_PATTERN}",
+            name="explanation_sha256_hex",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    workflow_id: Mapped[str] = mapped_column(
+        ForeignKey("workflows.workflow_id"), index=True
+    )
+    actor_id: Mapped[str] = mapped_column(String(64))
+    provider: Mapped[str] = mapped_column(String(64))
+    stop_reason: Mapped[str] = mapped_column(String(32))
+    provider_calls: Mapped[int] = mapped_column(Integer)
+    tool_calls: Mapped[int] = mapped_column(Integer)
+    refused_calls: Mapped[int] = mapped_column(Integer)
+    proposed_next_step: Mapped[str | None] = mapped_column(String(32))
+    next_step: Mapped[str | None] = mapped_column(String(32))
+    override_reason: Mapped[str | None] = mapped_column(String(64))
+    explanation_sha256: Mapped[str | None] = mapped_column(String(64))
+    explanation_chars: Mapped[int | None] = mapped_column(Integer)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = _created_at()
+
+
+class AgentStepRow(Base):
+    """One trace entry: tool name, codes, sizes and hashes, never content."""
+
+    __tablename__ = "agent_steps"
+    __table_args__ = (
+        CheckConstraint(_one_of("kind", STEP_KIND_VALUES), name="kind"),
+        CheckConstraint("seq > 0", name="seq_positive"),
+        CheckConstraint("duration_ms >= 0", name="duration_non_negative"),
+        CheckConstraint(
+            f"arguments_sha256 IS NULL OR arguments_sha256 ~ {HASH_PATTERN}",
+            name="arguments_sha256_hex",
+        ),
+        CheckConstraint(
+            f"result_sha256 IS NULL OR result_sha256 ~ {HASH_PATTERN}",
+            name="result_sha256_hex",
+        ),
+    )
+
+    run_id: Mapped[UUID] = mapped_column(ForeignKey("agent_runs.id"), primary_key=True)
+    seq: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    tool_name: Mapped[str | None] = mapped_column(String(64))
+    arguments_sha256: Mapped[str | None] = mapped_column(String(64))
+    result_sha256: Mapped[str | None] = mapped_column(String(64))
+    result_bytes: Mapped[int | None] = mapped_column(Integer)
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    duration_ms: Mapped[int] = mapped_column(Integer)
+
+
 # Rows that must never change after insertion; a database trigger enforces this.
 APPEND_ONLY_TABLES = (
     "invoice_versions",
@@ -608,4 +691,6 @@ APPEND_ONLY_TABLES = (
     "reconciliation_currency_rules",
     "reconciliation_snapshots",
     "outbox_events",
+    "agent_runs",
+    "agent_steps",
 )

@@ -40,8 +40,24 @@ def _principal(
     ("role", "allowed"),
     [
         (Role.VIEWER, {Permission.VIEW}),
-        (Role.CLERK, {Permission.VIEW, Permission.SUBMIT, Permission.RECONCILE}),
-        (Role.APPROVER, {Permission.VIEW, Permission.RECONCILE, Permission.DECIDE}),
+        (
+            Role.CLERK,
+            {
+                Permission.VIEW,
+                Permission.SUBMIT,
+                Permission.RECONCILE,
+                Permission.ASSIST,
+            },
+        ),
+        (
+            Role.APPROVER,
+            {
+                Permission.VIEW,
+                Permission.RECONCILE,
+                Permission.DECIDE,
+                Permission.ASSIST,
+            },
+        ),
     ],
 )
 def test_role_permission_matrix(role: Role, allowed: set[Permission]) -> None:
@@ -148,4 +164,12 @@ def test_decisions_demo_needs_a_database(capsys: pytest.CaptureFixture[str]) -> 
     from app.decisions_demo import main as decisions_main
 
     assert decisions_main([]) == 2
+    assert "DATABASE_URL" in capsys.readouterr().err
+
+
+def test_agent_demo_needs_a_database(capsys: pytest.CaptureFixture[str]) -> None:
+    """The Stage 07 demo refuses to run without DATABASE_URL."""
+    from app.agent_demo import main as agent_main
+
+    assert agent_main([]) == 2
     assert "DATABASE_URL" in capsys.readouterr().err

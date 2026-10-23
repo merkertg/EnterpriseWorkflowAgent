@@ -22,7 +22,7 @@ real supplier or modify a production ERP system.
 
 ## Delivery strategy
 
-Stages 01–06 are implemented. Stage 01 establishes a small FastAPI service,
+Stages 01–07 are implemented. Stage 01 establishes a small FastAPI service,
 environment settings, tests, static checks and documentation. Stage 02 adds a
 standard-library domain with immutable purchasing models, exact money, seven
 basic rule findings and in-memory workflow transitions.
@@ -40,6 +40,9 @@ Stage 06 adds token-authenticated employees with unit-scoped roles, the
 business HTTP API, approval on a fresh matched reconciliation and a
 transactional outbox ([ADR 0006](adr/0006-employee-decisions-and-outbox.md));
 `uv run --locked python -m app.decisions_demo` exercises it.
+Stage 07 adds a bounded review agent behind a model-provider port with
+deterministic offline providers ([ADR 0007](adr/0007-bounded-review-agent.md));
+`uv run --locked python -m app.agent_demo` exercises it.
 The default local port is `8003`. The first endpoint is `GET /health`; with
 default settings it returns:
 
@@ -80,7 +83,8 @@ app/
   application/            # Use cases, access rules, tokens and persistence ports
   infrastructure/db/      # SQLAlchemy tables, repositories, engine and unit of work
   infrastructure/documents/   # Text decoding and the isolated PDF worker
-  infrastructure/extraction/  # Deterministic field extractor
+  infrastructure/extraction/  # Deterministic and model-backed field extractors
+  infrastructure/llm/     # Deterministic offline model providers
   demo.py                 # Fictional offline scenarios; no HTTP or storage
   persistence_demo.py     # Fictional PostgreSQL scenario and read-back command
   samples.py              # Fictional text/PDF samples and a tiny PDF writer
@@ -88,6 +92,7 @@ app/
   reconciliation_cli.py   # Reconciliation demo and snapshot reports
   users_cli.py            # Employee accounts and API tokens
   decisions_demo.py       # Fictional Stage 06 decision scenario
+  agent_demo.py           # Fictional offline Stage 07 agent scenarios
 migrations/               # Alembic environment and revisions
 tests/
 ```
@@ -100,7 +105,7 @@ their behavior is introduced:
 | --- | --- | --- |
 | `domain/` | Typed business objects, money, rules and allowed state transitions | Python and explicit domain types; no HTTP, database or model SDK |
 | `application/` | Use cases, authorization requirements and transaction orchestration | Domain and ports for persistence, extraction and events |
-| `infrastructure/` | SQLAlchemy repositories, PDF/text extraction and the deterministic field extractor (implemented); model providers and event delivery (planned) | Implements application ports |
+| `infrastructure/` | SQLAlchemy repositories, PDF/text extraction, deterministic and model-backed field extractors, deterministic model providers (implemented); a real model adapter and event delivery (planned) | Implements application ports |
 | `api/` | HTTP schemas, bearer authentication, request validation and error mapping (implemented in Stage 06) | Application use cases |
 
 The composition root wires adapters into use cases. Domain decisions must not
@@ -124,10 +129,14 @@ Every extractor only proposes fields; `assess_extraction` accepts a value only
 if the stored page text at each cited span equals it, enforces a strict schema
 and canonical formats, and sends incomplete results to review. PDFs are parsed
 in a separate isolated process with a hard timeout.
-The agent runtime starts with a fake provider, then optionally gains a real
-provider adapter. Constrain tool names, arguments, output sizes, execution time
-and total steps. Approval and payment commands are not agent tools. Tool calls
-go through the same server-side validation as other application commands.
+Since Stage 07 the agent runtime uses deterministic providers behind a
+`ModelProvider` port; a real provider adapter may follow and is verified
+separately. Tool names, arguments (strict schemas), result sizes, wall time
+per call, provider and tool calls and refusals are bounded. Approval, payment
+and code-execution commands are not agent tools. Tools re-check the
+employee's rights in their own transactions, and the agent's draft next step
+is checked against stored facts before it is shown. Traces keep names, codes,
+sizes and hashes, never prompts or document text.
 
 ## State, persistence and side effects
 
@@ -211,9 +220,10 @@ fingerprint and a test keep them from silently falling behind the code.
 ## Current exclusions
 
 Since Stage 06 the HTTP API covers document upload, workflow commands,
-reconciliation, decisions, audit and outbox reads with bearer tokens. Account
-management over HTTP, token expiry and SSO, outbox delivery, an AI runtime,
-manual field correction and a user interface remain unimplemented. The wider project does not
+reconciliation, decisions, audit and outbox reads with bearer tokens. Since Stage 07
+a bounded agent runs with deterministic offline providers. Account management
+over HTTP, token expiry and SSO, outbox delivery, a real model adapter, manual
+field correction and a user interface remain unimplemented. The wider project does not
 promise production readiness, real payments, autonomous approval or unrestricted
 code execution. OCR, multi-tenant operation and production ERP connectors require
 separate decisions and acceptance criteria.

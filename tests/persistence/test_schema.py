@@ -14,6 +14,8 @@ from app.application.documents import DocumentService
 from app.application.reconciliation import ReconciliationService
 from app.application.workflows import WorkflowService
 from app.infrastructure.db.models import APPEND_ONLY_TABLES, Base
+from app.infrastructure.db.session import build_agent_service
+from app.infrastructure.llm.demo import DemoRulesProvider
 from app.samples import clean_invoice_text
 from tests.persistence.conftest import (
     TABLES,
@@ -93,6 +95,10 @@ def test_history_tables_reject_update_and_delete(
     reconciliation_service.reconcile(
         seed.workflow_id, rules_version_id=rules.version_id
     )
+    # An agent run writes run and step rows; it changes no workflow.
+    build_agent_service(engine, DemoRulesProvider()).run(
+        seed.workflow_id, actor=approver
+    )
     # A decision writes the outbox row; every table now has at least one row.
     service.reject(
         seed.workflow_id,
@@ -136,4 +142,6 @@ def _column(table: str) -> str:
         return "status = status"
     if table == "reconciliation_currency_rules":
         return "currency = currency"
+    if table == "agent_steps":
+        return "kind = kind"
     return "created_at = created_at"

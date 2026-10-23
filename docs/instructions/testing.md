@@ -101,6 +101,20 @@ writers waiting on the approval's advisory lock, the HTTP API through
 upload limits, foreign units) and the users CLI and decisions demo in separate
 processes.
 
+Stage 07 tests without a database drive the agent loop with fake tools and
+scripted providers: a trace without content, results linked by call ID, seven
+refused calls (unknown tool, five kinds of invalid arguments, another
+workflow), the refusal, provider-call and tool-call limits, provider and tool
+timeouts, the result size limit, provider refusals, exceptions and invalid
+answers, every branch of `review_draft`, the schema validator and limits, the
+model field extractor (correct, fabricated and unusable output) and the demo
+provider's plan. Their PostgreSQL tests cover a draft that changes nothing but
+the trace, a document instruction that is refused and never stored, an
+explanation returned but not stored, drafts checked against stored facts
+including real staleness, rights for runs, tools and traces, shortened and
+marked document values, model fields through document intake, the agent HTTP
+endpoints and the demo in separate processes.
+
 `tests/test_guide_pdfs.py` checks both PDF guides with pypdf: the source
 fingerprint stored in each PDF must match a fresh hash of the generator,
 `docs/guide/verification.json`, `app/`, migrations and `uv.lock`; every section

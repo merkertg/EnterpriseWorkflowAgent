@@ -59,6 +59,7 @@ STAGE_COLOURS = {
     "04": "#C4B5FD",
     "05": "#86EFAC",
     "06": "#F9A8D4",
+    "07": "#FCD34D",
 }
 
 
@@ -104,10 +105,12 @@ def cover_page(c: Canvas, doc: Any) -> None:
         tr(
             "Наглядное руководство: uv и FastAPI, точные деньги и правила, "
             "состояния процесса, PostgreSQL и миграции, транзакции, аудит и повторы, "
-            "документы с цитатами, сверка с заказом и решение сотрудника с ролями.",
+            "документы с цитатами, сверка с заказом, решение сотрудника с ролями и "
+            "ограниченный агент.",
             "A visual guide: uv and FastAPI, exact money and rules, workflow states, "
             "PostgreSQL and migrations, transactions, audit and retries, documents "
-            "with citations, order reconciliation and role-checked employee decisions.",
+            "with citations, order reconciliation, role-checked employee decisions "
+            "and a bounded agent.",
         ),
         "PT",
         13.5,
@@ -194,6 +197,8 @@ def cover_page(c: Canvas, doc: Any) -> None:
     )
     c.drawString(MARGIN + 80, 326, tr("этапы ", "stages ") + ranges)
     rows = (len(CONTENTS) + 1) // 2
+    # Shrink the line spacing as sections are added; the list ends above y=90.
+    step = min(17.0, (306 - 90) / max(rows - 1, 1))
     for index, (ru, en) in enumerate(CONTENTS):
         column, row = divmod(index, rows)
         number = index + 1
@@ -203,7 +208,7 @@ def cover_page(c: Canvas, doc: Any) -> None:
                 colour = STAGE_COLOURS[stage]
         c.setFillColor(HEX(colour))
         c.setFont("PT", 9)
-        c.drawString(MARGIN + column * 250, 306 - row * 17, f"{number}  {tr(ru, en)}")
+        c.drawString(MARGIN + column * 250, 306 - row * step, f"{number}  {tr(ru, en)}")
     c.setStrokeColor(HEX("#334155"))
     c.line(MARGIN, 82, PAGE_W - MARGIN, 82)
     c.setFillColor(HEX("#64748B"))
@@ -284,17 +289,17 @@ def build_guide(
             bottomMargin=17 * mm,
             title="Enterprise Workflow Agent - "
             + tr(
-                f"этапы 01–{STAGES_DONE:02d}: домен, хранение, документы, сверка "
-                "и решения",
+                f"этапы 01–{STAGES_DONE:02d}: домен, хранение, документы, сверка, "
+                "решения и агент",
                 f"stages 01–{STAGES_DONE:02d}: domain, storage, documents, "
-                "reconciliation, decisions",
+                "reconciliation, decisions, agent",
             ),
             author="Enterprise Workflow Agent",
             subject=tr(
                 "uv, FastAPI, Decimal, PostgreSQL, Alembic, аудит, идемпотентность, "
-                "PDF, цитаты полей, сверка, роли и outbox",
+                "PDF, цитаты полей, сверка, роли, outbox и ограниченный агент",
                 "uv, FastAPI, Decimal, PostgreSQL, Alembic, audit, idempotency, "
-                "PDF, field evidence, reconciliation, roles and outbox",
+                "PDF, field evidence, reconciliation, roles, outbox and bounded agent",
             ),
             keywords=PREFIX + fingerprint,
             lang=lang,

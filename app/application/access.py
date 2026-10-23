@@ -34,13 +34,16 @@ class Permission(StrEnum):
     SUBMIT = "submit"
     RECONCILE = "reconcile"
     DECIDE = "decide"
+    ASSIST = "assist"
 
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     Role.VIEWER: frozenset({Permission.VIEW}),
-    Role.CLERK: frozenset({Permission.VIEW, Permission.SUBMIT, Permission.RECONCILE}),
+    Role.CLERK: frozenset(
+        {Permission.VIEW, Permission.SUBMIT, Permission.RECONCILE, Permission.ASSIST}
+    ),
     Role.APPROVER: frozenset(
-        {Permission.VIEW, Permission.RECONCILE, Permission.DECIDE}
+        {Permission.VIEW, Permission.RECONCILE, Permission.DECIDE, Permission.ASSIST}
     ),
 }
 

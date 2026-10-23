@@ -312,12 +312,12 @@ def add_stage04(story: list[Any], facts: Facts) -> None:
             tr(
                 "<b>Выдуманное значение не проходит.</b> Если извлекатель утверждает "
                 "сумму 0.00, но ссылается на место, где написано 30.00, появляется "
-                "unverified_evidence и счёт не создаётся. Это защищает и от будущей "
-                "модели этапа 07.",
+                "unverified_evidence и счёт не создаётся. Так же проверяются поля, "
+                "которые на этапе 07 предлагает модель.",
                 "<b>A fabricated value fails.</b> If an extractor claims a total of "
                 "0.00 while citing text that says 30.00, unverified_evidence appears "
-                "and no invoice is created. This also guards against the Stage 07 "
-                "model.",
+                "and no invoice is created. Fields proposed by the Stage 07 model "
+                "face the same check.",
             ),
             RED,
             RED_L,

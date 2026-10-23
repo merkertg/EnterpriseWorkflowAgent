@@ -91,6 +91,12 @@ _ROUTE_TEXT = {
         "События решений",
         "Decision events",
     ),
+    ("POST", "/workflows/{workflow_id}/agent-runs"): (
+        "assist",
+        "Запуск агента (этап 07)",
+        "Run the agent (stage 07)",
+    ),
+    ("GET", "/agent-runs/{run_id}"): ("view", "Трассировка агента", "Agent trace"),
 }
 
 _OUTBOX_TEXT = {

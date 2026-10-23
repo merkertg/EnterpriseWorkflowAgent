@@ -481,6 +481,91 @@ class ReconciliationRepository(Protocol):
         ...
 
 
+class AgentStopReason(StrEnum):
+    """Why an agent run ended; only final_answer means the model finished."""
+
+    FINAL_ANSWER = "final_answer"
+    TOOL_CALL_LIMIT = "tool_call_limit"
+    PROVIDER_CALL_LIMIT = "provider_call_limit"
+    TOO_MANY_REFUSALS = "too_many_refusals"
+    PROVIDER_TIMEOUT = "provider_timeout"
+    PROVIDER_ERROR = "provider_error"
+    PROVIDER_REFUSAL = "provider_refusal"
+    TOOL_TIMEOUT = "tool_timeout"
+    INVALID_FINAL_ANSWER = "invalid_final_answer"
+
+
+class AgentStepKind(StrEnum):
+    """One entry of an agent trace."""
+
+    PROVIDER_CALL = "provider_call"
+    TOOL_CALL = "tool_call"
+    REFUSED_CALL = "refused_call"
+    FINAL_ANSWER = "final_answer"
+    STOP = "stop"
+
+
+class NextStep(StrEnum):
+    """Drafts the agent may suggest; none of them changes the workflow."""
+
+    READY_FOR_APPROVAL = "ready_for_approval"
+    REQUEST_NEW_RECONCILIATION = "request_new_reconciliation"
+    RECOMMEND_REJECTION = "recommend_rejection"
+    NEEDS_HUMAN_REVIEW = "needs_human_review"
+
+
+@dataclass(frozen=True, slots=True)
+class AgentStep:
+    """A trace entry: names, codes, sizes and hashes, never document text."""
+
+    seq: int
+    kind: AgentStepKind
+    tool_name: str | None = None
+    arguments_sha256: str | None = None
+    result_sha256: str | None = None
+    result_bytes: int | None = None
+    error_code: str | None = None
+    duration_ms: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class AgentRunRecord:
+    """A finished run: limits used, outcome, policy override and trace.
+
+    The explanation itself is not stored: it may quote document text. Only
+    its SHA-256 and length are kept, so a shown text can be matched later.
+    """
+
+    run_id: UUID
+    workflow_id: str
+    actor_id: str
+    provider: str
+    stop_reason: AgentStopReason
+    provider_calls: int
+    tool_calls: int
+    refused_calls: int
+    proposed_next_step: NextStep | None
+    next_step: NextStep | None
+    override_reason: str | None
+    explanation_sha256: str | None
+    explanation_chars: int | None
+    steps: tuple[AgentStep, ...]
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+
+class AgentRunRepository(Protocol):
+    """Store finished agent runs and read them back."""
+
+    def add_run(self, run: AgentRunRecord) -> None:
+        """Insert a run with its steps; both are append-only."""
+        ...
+
+    def get_run(self, run_id: UUID) -> AgentRunRecord | None:
+        """Return a run and its ordered steps."""
+        ...
+
+
 class UnitOfWork(Protocol):
     """One transaction: commit explicitly, otherwise leaving the block rolls back."""
 
@@ -502,6 +587,11 @@ class UnitOfWork(Protocol):
     @property
     def users(self) -> UserRepository:
         """Return the user repository bound to the same transaction."""
+        ...
+
+    @property
+    def agent_runs(self) -> AgentRunRepository:
+        """Return the agent-run repository bound to the same transaction."""
         ...
 
     def __enter__(self) -> Self:

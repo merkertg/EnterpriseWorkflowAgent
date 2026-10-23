@@ -8,7 +8,9 @@ Stage 04 accepts UTF-8 text and PDFs with a text layer, extracts invoice
 fields with a deterministic parser and records the exact source span of every
 value. Since Stage 06 documents can also be uploaded with
 `POST /documents` by a user with the `submit` permission; see
-[API usage](usage.md).
+[API usage](usage.md). Since Stage 07 a model provider can propose the fields
+through `ModelFieldExtractor`; the same evidence check applies, see
+[agent](agent.md).
 
 ## Commands
 

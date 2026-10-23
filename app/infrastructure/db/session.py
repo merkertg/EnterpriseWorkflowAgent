@@ -6,7 +6,11 @@ from sqlalchemy import URL, Engine, create_engine, make_url
 from sqlalchemy.exc import ArgumentError
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.application.agent import AgentLimits, AgentService
+from app.application.agent_protocol import ModelProvider
+from app.application.agent_tools import WorkflowToolBox
 from app.application.documents import DocumentService
+from app.application.ports import FieldExtractor
 from app.application.reconciliation import ReconciliationService
 from app.application.users import UserService
 from app.application.workflows import WorkflowService
@@ -65,13 +69,15 @@ def build_workflow_service(engine: Engine) -> WorkflowService:
 
 
 def build_document_service(
-    engine: Engine, limits: DocumentLimits | None = None
+    engine: Engine,
+    limits: DocumentLimits | None = None,
+    field_extractor: FieldExtractor | None = None,
 ) -> DocumentService:
-    """Compose document intake with the PDF worker and deterministic parser."""
+    """Compose document intake; the deterministic parser is the default."""
     return DocumentService(
         partial(SqlAlchemyUnitOfWork, create_session_factory(engine)),
         LimitedTextExtractor(),
-        LabeledTextInvoiceParser(),
+        LabeledTextInvoiceParser() if field_extractor is None else field_extractor,
         limits,
     )
 
@@ -86,3 +92,11 @@ def build_reconciliation_service(engine: Engine) -> ReconciliationService:
 def build_user_service(engine: Engine) -> UserService:
     """Compose employee and token management with one unit of work per call."""
     return UserService(partial(SqlAlchemyUnitOfWork, create_session_factory(engine)))
+
+
+def build_agent_service(
+    engine: Engine, provider: ModelProvider, limits: AgentLimits | None = None
+) -> AgentService:
+    """Compose the review agent with read-only tools over this database."""
+    unit_of_work = partial(SqlAlchemyUnitOfWork, create_session_factory(engine))
+    return AgentService(provider, WorkflowToolBox(unit_of_work), unit_of_work, limits)
