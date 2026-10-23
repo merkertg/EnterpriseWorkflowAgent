@@ -13,14 +13,17 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.application.access import Principal
 from app.application.agent import AgentRunResult
-from app.application.documents import IngestResult
+from app.application.documents import FieldEvidence, IngestResult
 from app.application.ports import (
     AgentRunRecord,
     AuditEvent,
     CommandResult,
     OutboxEvent,
+    StoredDocument,
+    StoredExtraction,
     StoredWorkflow,
     VersionRef,
+    WorkflowSummary,
 )
 from app.application.reconciliation import ReconciliationReport
 
@@ -465,3 +468,103 @@ class AgentRunResponse(BaseModel):
     def of_result(cls, result: AgentRunResult) -> "AgentRunResponse":
         """Copy a fresh run including its explanation."""
         return cls.of(result.record, result.explanation, result.cited_codes)
+
+
+class WorkflowSummaryResponse(BaseModel):
+    """One row of the workflow list."""
+
+    workflow_id: str
+    invoice_id: str
+    state: str
+    version: int
+    business_unit: str
+    created_by: str | None
+    updated_at: datetime | None
+
+    @classmethod
+    def of(cls, summary: WorkflowSummary) -> "WorkflowSummaryResponse":
+        """Copy a summary."""
+        return cls(
+            workflow_id=summary.workflow_id,
+            invoice_id=summary.invoice_id,
+            state=summary.state.value,
+            version=summary.version,
+            business_unit=summary.business_unit,
+            created_by=summary.created_by,
+            updated_at=summary.updated_at,
+        )
+
+
+class CitationResponse(BaseModel):
+    """A cited span: page, line, offsets, the quote and its whole line."""
+
+    page: int
+    line_number: int
+    start: int
+    end: int
+    quote: str
+    line: str
+
+
+class EvidenceFieldResponse(BaseModel):
+    """One extracted field with every span that supports it."""
+
+    name: str
+    status: str
+    value: str | None
+    message: str | None
+    citations: list[CitationResponse]
+
+
+class WorkflowDocumentResponse(BaseModel):
+    """The source document of a workflow's invoice and its cited fields."""
+
+    document_id: UUID
+    media_type: str
+    page_count: int
+    declared_name: str | None
+    extractor: str
+    extraction_status: str
+    problems: list[ProblemResponse]
+    fields: list[EvidenceFieldResponse]
+
+    @classmethod
+    def of(
+        cls,
+        document: StoredDocument,
+        extraction: StoredExtraction,
+        evidence: tuple[FieldEvidence, ...],
+    ) -> "WorkflowDocumentResponse":
+        """Combine document metadata, extraction status and citations."""
+        return cls(
+            document_id=document.document_id,
+            media_type=document.media_type.value,
+            page_count=document.page_count,
+            declared_name=document.declared_name,
+            extractor=extraction.result.extractor,
+            extraction_status=extraction.status.value,
+            problems=[
+                ProblemResponse(code=p.code.value, field=p.field)
+                for p in extraction.problems
+            ],
+            fields=[
+                EvidenceFieldResponse(
+                    name=item.field.name,
+                    status=item.field.status.value,
+                    value=item.field.value,
+                    message=item.field.message,
+                    citations=[
+                        CitationResponse(
+                            page=c.page,
+                            line_number=c.line_number,
+                            start=c.start,
+                            end=c.end,
+                            quote=c.quote,
+                            line=c.line,
+                        )
+                        for c in item.citations
+                    ],
+                )
+                for item in evidence
+            ],
+        )

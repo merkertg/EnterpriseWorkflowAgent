@@ -45,6 +45,7 @@ from app.application.ports import (
     Versioned,
     VersionRef,
     WorkflowRepository,
+    WorkflowSummary,
     require_positive_version,
 )
 from app.application.reconciliation import compute_freshness
@@ -64,6 +65,7 @@ from app.domain.rules import ValidationPolicy
 from app.domain.workflow import (
     HumanDecision,
     Workflow,
+    WorkflowState,
     approve_workflow,
     check_workflow,
     reject_workflow,
@@ -542,6 +544,28 @@ class WorkflowService:
         workflow_id = validate_text(workflow_id, "workflow_id")
         with self._unit_of_work() as unit:
             return _visible(unit, workflow_id, actor)
+
+    def list_workflows(
+        self,
+        *,
+        actor: Principal | None = None,
+        state: WorkflowState | None = None,
+        limit: int = 100,
+    ) -> tuple[WorkflowSummary, ...]:
+        """List recently changed workflows in the actor's business units.
+
+        Without an actor (internal tools) every unit is listed.
+        """
+        if state is not None:
+            _require_type(state, WorkflowState, "state")
+        if type(limit) is not int or not 1 <= limit <= 500:
+            raise DomainValidationError(
+                "invalid_limit", "limit", "limit must be between 1 and 500."
+            )
+        with self._unit_of_work() as unit:
+            principal = current_principal(unit, actor, Permission.VIEW, None)
+            units = None if principal is None else principal.units
+            return unit.repository.list_workflows(units, state, limit)
 
     def get_snapshot(self, snapshot_id: UUID) -> ValidationSnapshot:
         """Return a historical check result with the exact inputs it used."""

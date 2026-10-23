@@ -173,3 +173,11 @@ def test_agent_demo_needs_a_database(capsys: pytest.CaptureFixture[str]) -> None
 
     assert agent_main([]) == 2
     assert "DATABASE_URL" in capsys.readouterr().err
+
+
+def test_ui_demo_setup_needs_a_database(capsys: pytest.CaptureFixture[str]) -> None:
+    """The interface setup refuses to run without DATABASE_URL."""
+    from app.ui_demo_setup import main as setup_main
+
+    assert setup_main([]) == 2
+    assert "DATABASE_URL" in capsys.readouterr().err

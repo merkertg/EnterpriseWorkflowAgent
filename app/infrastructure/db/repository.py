@@ -26,6 +26,7 @@ from app.application.ports import (
     ValidationSnapshot,
     Versioned,
     VersionRef,
+    WorkflowSummary,
 )
 from app.domain.content_hash import content_hash
 from app.domain.errors import DomainValidationError
@@ -595,6 +596,45 @@ class SqlAlchemyWorkflowRepository:
                 payload=event.payload,
             )
         )
+
+    def list_workflows(
+        self,
+        units: frozenset[str] | None,
+        state: WorkflowState | None,
+        limit: int,
+    ) -> tuple[WorkflowSummary, ...]:
+        """Newest changes first; None for units means every unit."""
+        statement = select(
+            WorkflowRow.workflow_id,
+            WorkflowRow.invoice_id,
+            WorkflowRow.state,
+            WorkflowRow.version,
+            WorkflowRow.business_unit,
+            WorkflowRow.created_by,
+            WorkflowRow.updated_at,
+        )
+        if units is not None:
+            statement = statement.where(WorkflowRow.business_unit.in_(sorted(units)))
+        if state is not None:
+            statement = statement.where(WorkflowRow.state == state.value)
+        rows = self._session.execute(
+            statement.order_by(
+                WorkflowRow.updated_at.desc(), WorkflowRow.workflow_id
+            ).limit(limit)
+        ).all()
+        with reconstructing("workflow summary"):
+            return tuple(
+                WorkflowSummary(
+                    workflow_id=row.workflow_id,
+                    invoice_id=row.invoice_id,
+                    state=WorkflowState(row.state),
+                    version=row.version,
+                    business_unit=row.business_unit,
+                    created_by=row.created_by,
+                    updated_at=row.updated_at,
+                )
+                for row in rows
+            )
 
     def list_outbox_events(self, workflow_id: str) -> tuple[OutboxEvent, ...]:
         """Return a workflow's outbox events oldest first."""

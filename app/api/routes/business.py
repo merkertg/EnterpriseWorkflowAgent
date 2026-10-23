@@ -29,9 +29,13 @@ from app.api.schemas.business import (
     ReviseRequest,
     StartWorkflowRequest,
     VersionRefResponse,
+    WorkflowDocumentResponse,
     WorkflowResponse,
+    WorkflowSummaryResponse,
 )
+from app.application.errors import NotFoundError
 from app.application.workflows import ReferenceKind
+from app.domain.workflow import WorkflowState
 
 router = APIRouter()
 
@@ -140,6 +144,22 @@ def start_workflow(
 
 
 @router.get(
+    "/workflows", response_model=list[WorkflowSummaryResponse], tags=["workflows"]
+)
+def list_workflows(
+    services: ServicesDep,
+    principal: PrincipalDep,
+    state: WorkflowState | None = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+) -> list[WorkflowSummaryResponse]:
+    """List recently changed workflows in the caller's business units."""
+    summaries = services.workflows.list_workflows(
+        actor=principal, state=state, limit=limit
+    )
+    return [WorkflowSummaryResponse.of(item) for item in summaries]
+
+
+@router.get(
     "/workflows/{workflow_id}", response_model=WorkflowResponse, tags=["workflows"]
 )
 def get_workflow(
@@ -149,6 +169,21 @@ def get_workflow(
     return WorkflowResponse.of(
         services.workflows.get_workflow(workflow_id, actor=principal)
     )
+
+
+@router.get(
+    "/workflows/{workflow_id}/document",
+    response_model=WorkflowDocumentResponse,
+    tags=["documents"],
+)
+def workflow_document(
+    workflow_id: WorkflowId, services: ServicesDep, principal: PrincipalDep
+) -> WorkflowDocumentResponse:
+    """Return the invoice's source document with every field's citations."""
+    found = services.documents.workflow_evidence(workflow_id, actor=principal)
+    if found is None:
+        raise NotFoundError("The workflow's invoice has no source document.")
+    return WorkflowDocumentResponse.of(*found)
 
 
 @router.post(

@@ -86,6 +86,19 @@ class StoredWorkflow:
 
 
 @dataclass(frozen=True, slots=True)
+class WorkflowSummary:
+    """A workflow row for lists: no inputs are loaded or re-hashed."""
+
+    workflow_id: str
+    invoice_id: str
+    state: WorkflowState
+    version: int
+    business_unit: str
+    created_by: str | None
+    updated_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
 class ValidationSnapshot:
     """An immutable check result tied to exact input version IDs and hashes."""
 
@@ -291,6 +304,15 @@ class WorkflowRepository(Protocol):
 
     def list_audit_events(self, workflow_id: str) -> tuple[AuditEvent, ...]:
         """Return a workflow's audit events in insertion order."""
+        ...
+
+    def list_workflows(
+        self,
+        units: frozenset[str] | None,
+        state: WorkflowState | None,
+        limit: int,
+    ) -> tuple[WorkflowSummary, ...]:
+        """Return the most recently changed workflows, optionally filtered."""
         ...
 
     def get_idempotency_record(self, key: str) -> IdempotencyRecord | None:

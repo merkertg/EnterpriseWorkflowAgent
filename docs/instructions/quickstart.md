@@ -86,3 +86,8 @@ and [API usage](usage.md).
 
 For Stage 07, run `uv run --locked python -m app.agent_demo` (offline, no model
 key); see [agent](agent.md).
+
+For Stage 08, install the interface with `uv sync --locked --group ui`, run
+`uv run --locked python -m app.ui_demo_setup`, start the API and then
+`uv run --locked --group ui python -m streamlit run ui/app.py`; see
+[interface](ui.md).

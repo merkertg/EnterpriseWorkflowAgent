@@ -41,8 +41,8 @@ _ROUTE_TEXT = {
     ),
     ("GET", "/reference/{kind}/{business_id}"): (
         "view",
-        "Последняя версия заказа, политики, правил",
-        "Latest order, policy or rules version",
+        "Последняя версия справочника",
+        "Latest reference version",
     ),
     ("POST", "/workflows"): (
         "submit",
@@ -97,6 +97,16 @@ _ROUTE_TEXT = {
         "Run the agent (stage 07)",
     ),
     ("GET", "/agent-runs/{run_id}"): ("view", "Трассировка агента", "Agent trace"),
+    ("GET", "/workflows"): (
+        "view",
+        "Список процессов (этап 08)",
+        "Workflow list (stage 08)",
+    ),
+    ("GET", "/workflows/{workflow_id}/document"): (
+        "view",
+        "Поля с цитатами (этап 08)",
+        "Fields with citations (stage 08)",
+    ),
 }
 
 _OUTBOX_TEXT = {

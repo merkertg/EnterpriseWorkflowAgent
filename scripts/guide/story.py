@@ -36,6 +36,7 @@ from guide.stage04 import add_stage04
 from guide.stage05 import add_stage05
 from guide.stage06 import add_stage06
 from guide.stage07 import add_stage07
+from guide.stage08 import add_stage08
 from guide.toc import section
 
 _REMOTE = {
@@ -160,6 +161,13 @@ def _overview(story: list[Any]) -> None:
                         "Agent with read-only tools, limits, draft check and trace",
                     ),
                 ],
+                [
+                    "08",
+                    tr(
+                        "Страница Streamlit только через HTTP API; повторы не дублируют команды",
+                        "Streamlit page over the HTTP API only; repeats never duplicate commands",
+                    ),
+                ],
             ],
             [50, W - 50],
         ),
@@ -239,13 +247,24 @@ def _cheat_sheet(story: list[Any]) -> None:
         ),
         ("... decisions_demo", tr("Демонстрация этапа 06", "Stage 06 demo")),
         ("... agent_demo", tr("Агент этапа 07, без сети", "Stage 07 agent, offline")),
+        (
+            "... ui_demo_setup",
+            tr(
+                "Сотрудники, токены, образцы для страницы",
+                "Employees, tokens, samples for the page",
+            ),
+        ),
+        (
+            "uv run --locked --group ui python -m streamlit run ui/app.py",
+            tr("Страница этапа 08", "Stage 08 page"),
+        ),
         ("uv run --locked ruff check .", tr("Линтер", "Linter")),
         (
-            "uv run --locked mypy app tests scripts migrations",
+            "uv run --locked --group ui mypy app tests scripts migrations ui",
             tr("Строгие типы", "Strict types"),
         ),
         (
-            "uv run --locked pytest",
+            "uv run --locked --group ui pytest",
             tr(
                 "Тесты; с TEST_DATABASE_URL — и базы",
                 "Tests; with TEST_DATABASE_URL also the database",
@@ -411,6 +430,17 @@ def _common_errors(story: list[Any]) -> None:
             ),
         ),
         (
+            mono("ModuleNotFoundError: streamlit"),
+            tr("Запускай с --group ui", "Run with --group ui"),
+        ),
+        (
+            mono("api_unreachable"),
+            tr(
+                "Запусти uvicorn и проверь адрес API",
+                "Start uvicorn and check the API URL",
+            ),
+        ),
+        (
             mono("503 database_not_configured"),
             tr(
                 "Задай DATABASE_URL и перезапусти API",
@@ -517,6 +547,10 @@ def _questions(story: list[Any]) -> None:
             "Why can the draft check only lower the next step?",
         ),
         tr(
+            "Почему ключ идемпотентности строится из намерения, а не случайно?",
+            "Why is the idempotency key derived from the intent, not random?",
+        ),
+        tr(
             "Что пока не защищено и на каком этапе это появится?",
             "What is not protected yet, and in which stage will it be?",
         ),
@@ -608,12 +642,11 @@ def _results(story: list[Any], verification: dict[str, Any]) -> None:
         callout(
             tr(
                 "Не реализовано: адаптер настоящей LLM (07 работает с подставными "
-                "провайдерами), интерфейс (08), лимит памяти PDF-процесса и доставка "
-                "outbox (09), Docker-выпуск (10). Срок действия токенов и SSO — вне "
-                "объёма.",
+                "провайдерами), лимит памяти PDF-процесса и доставка outbox (09), "
+                "Docker-выпуск (10). Срок действия токенов и SSO — вне объёма.",
                 "Not implemented: a real LLM adapter (07 runs substitute providers), "
-                "a UI (08), a PDF worker memory limit and outbox delivery (09), Docker "
-                "release (10). Token expiry and SSO are out of scope.",
+                "a PDF worker memory limit and outbox delivery (09), Docker release "
+                "(10). Token expiry and SSO are out of scope.",
             ),
             GREEN,
             GREEN_L,
@@ -632,6 +665,7 @@ def build_story(facts: Facts, verification: dict[str, Any]) -> list[Any]:
     add_stage05(story, facts)
     add_stage06(story, facts)
     add_stage07(story, facts)
+    add_stage08(story, facts)
     _cheat_sheet(story)
     _common_errors(story)
     _questions(story)

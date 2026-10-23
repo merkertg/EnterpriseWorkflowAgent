@@ -11,6 +11,7 @@ from sqlalchemy import Engine
 
 from app.api.dependencies import Services
 from app.application.documents import DocumentService
+from app.application.ports import CommandContext
 from app.application.reconciliation import ReconciliationService
 from app.application.users import UserService
 from app.application.workflows import WorkflowService
@@ -406,3 +407,50 @@ def test_agent_run_over_http(api: Api) -> None:
         2,
         None,
     )
+
+
+def test_workflow_list_and_document_endpoints(
+    api: Api, service: WorkflowService
+) -> None:
+    """Lists are scoped to the caller's units; documents carry citations."""
+    _submit(api, "WF-API-1", "INV-API-1")
+    listed = api.call("get", "/workflows", "viewer")
+    assert isinstance(listed, list) and [w["workflow_id"] for w in listed] == [  # type: ignore[index]
+        "WF-API-1"
+    ]
+    assert api.call("get", "/workflows?state=approved", "viewer") == []
+    assert api.call("get", "/workflows", "outsider") == []
+    assert _error(api.call("get", "/workflows?state=paid", "viewer")) == (
+        422,
+        "invalid_request",
+    )
+    assert _error(api.call("get", "/workflows?limit=0", "viewer")) == (
+        422,
+        "invalid_request",
+    )
+    document = api.call("get", "/workflows/WF-API-1/document", "viewer")
+    assert isinstance(document, dict) and document["extraction_status"] == "complete"
+    fields: Any = document["fields"]
+    total = next(f for f in fields if f["name"] == "declared_total")
+    [citation] = total["citations"]
+    assert citation["quote"] == total["value"] == "30.00"
+    assert citation["line"].startswith("Total due")
+    assert _error(api.call("get", "/workflows/WF-API-1/document", "outsider")) == (
+        404,
+        "not_found",
+    )
+    invoice, _ = build_demo_documents()
+    code_made = service.record_invoice(replace(invoice, invoice_id="INV-CODE"))
+    service.start(
+        "WF-CODE",
+        invoice_version_id=code_made.version_id,
+        purchase_order_version_id=None,
+        policy_version_id=service.record_policy(
+            ValidationPolicy("api-test")
+        ).version_id,
+        business_unit=UNIT,
+        context=CommandContext("code-start", "pytest"),
+    )
+    missing = api.call("get", "/workflows/WF-CODE/document", "viewer")
+    assert _error(missing) == (404, "not_found")
+    assert "no source document" in str(missing)

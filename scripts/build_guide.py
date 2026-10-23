@@ -60,6 +60,7 @@ STAGE_COLOURS = {
     "05": "#86EFAC",
     "06": "#F9A8D4",
     "07": "#FCD34D",
+    "08": "#A5B4FC",
 }
 
 
@@ -105,12 +106,12 @@ def cover_page(c: Canvas, doc: Any) -> None:
         tr(
             "Наглядное руководство: uv и FastAPI, точные деньги и правила, "
             "состояния процесса, PostgreSQL и миграции, транзакции, аудит и повторы, "
-            "документы с цитатами, сверка с заказом, решение сотрудника с ролями и "
-            "ограниченный агент.",
+            "документы с цитатами, сверка с заказом, решение сотрудника с ролями, "
+            "ограниченный агент и интерфейс.",
             "A visual guide: uv and FastAPI, exact money and rules, workflow states, "
             "PostgreSQL and migrations, transactions, audit and retries, documents "
-            "with citations, order reconciliation, role-checked employee decisions "
-            "and a bounded agent.",
+            "with citations, order reconciliation, role-checked decisions, a bounded "
+            "agent and an interface.",
         ),
         "PT",
         13.5,
@@ -290,16 +291,17 @@ def build_guide(
             title="Enterprise Workflow Agent - "
             + tr(
                 f"этапы 01–{STAGES_DONE:02d}: домен, хранение, документы, сверка, "
-                "решения и агент",
+                "решения, агент и интерфейс",
                 f"stages 01–{STAGES_DONE:02d}: domain, storage, documents, "
-                "reconciliation, decisions, agent",
+                "reconciliation, decisions, agent, interface",
             ),
             author="Enterprise Workflow Agent",
             subject=tr(
                 "uv, FastAPI, Decimal, PostgreSQL, Alembic, аудит, идемпотентность, "
-                "PDF, цитаты полей, сверка, роли, outbox и ограниченный агент",
+                "PDF, цитаты полей, сверка, роли, outbox, агент и Streamlit",
                 "uv, FastAPI, Decimal, PostgreSQL, Alembic, audit, idempotency, "
-                "PDF, field evidence, reconciliation, roles, outbox and bounded agent",
+                "PDF, field evidence, reconciliation, roles, outbox, agent, "
+                "Streamlit",
             ),
             keywords=PREFIX + fingerprint,
             lang=lang,

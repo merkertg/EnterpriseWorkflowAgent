@@ -4,7 +4,7 @@
 
 Keep the initial application small and add a layer when it owns real behavior.
 
-## Implemented in Stages 01–07
+## Implemented in Stages 01–08
 
 | Location | Responsibility |
 | --- | --- |
@@ -58,6 +58,12 @@ Keep the initial application small and add a layer when it owns real behavior.
 | `app/users_cli.py` | Employee `create`, `token`, `revoke`, `deactivate`, `activate`, `list` |
 | `app/decisions_demo.py` | Fictional Stage 06 decision scenario and `show` |
 | `app/agent_demo.py` | Fictional offline Stage 07 agent scenarios and `show` |
+| `app/ui_demo_setup.py` | Fictional employees, tokens, reference data and samples for the interface |
+| `ui/app.py` | Streamlit page: sign-in, workflows, new invoice, actions, assistant, history |
+| `ui/client.py` | Standard-library HTTP client with a replaceable transport and `ApiError` |
+| `ui/keys.py` | Idempotency keys derived from the user's intent |
+| `ui/presenters.py` | Table rows and hints keyed by server error codes; no rules |
+| `.streamlit/config.toml` | Local Streamlit server settings (no usage statistics, 1 MB uploads) |
 | `alembic.ini`, `migrations/` | Alembic configuration, environment and revisions |
 | `tests/` | Automated checks; `tests/persistence/` needs `TEST_DATABASE_URL` |
 | `scripts/check_docs.py` | Local Markdown link validation |
@@ -94,6 +100,8 @@ and services; without `DATABASE_URL` business endpoints answer 503.
 | `docs/instructions/usage.md` | HTTP endpoints, authentication, idempotency and error codes |
 | `docs/STAGE_07.md` | Bounded agent, tools, limits, draft check and traces walkthrough in Russian |
 | `docs/instructions/agent.md` | Agent provider port, tools, limits, draft check, traces and demo |
+| `docs/STAGE_08.md` | Streamlit interface, HTTP client, repeated clicks and errors walkthrough in Russian |
+| `docs/instructions/ui.md` | Running the interface, pages, keys, errors and tests |
 | `docs/instructions/` | Short operational instructions in English |
 | `docs/CI_CD.md` | CI configuration and limits of remote verification |
 | `docs/VERIFICATION.md` | Recorded command outcomes and limitations |
@@ -108,7 +116,6 @@ directories to create now:
 | Location | Add when needed for |
 | --- | --- |
 | `app/infrastructure/` (other adapters) | A real model provider adapter and outbox delivery |
-| `ui/` | A client that calls the API |
 | `evals/` | Versioned evaluation cases and independent expected results |
 
 The persistence flow is `WorkflowService → UnitOfWork → SqlAlchemyWorkflowRepository

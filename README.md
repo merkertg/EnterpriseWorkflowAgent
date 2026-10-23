@@ -6,9 +6,9 @@ document, extract fields with source evidence, apply corporate rules, show
 discrepancies, obtain an employee's decision and record the next process step.
 All examples will use fictional data.
 
-**Current scope: Stages 01–07 — API foundation, domain, PostgreSQL storage,
-document intake, deterministic reconciliation, employee decisions and a
-bounded review agent.**
+**Current scope: Stages 01–08 — API foundation, domain, PostgreSQL storage,
+document intake, deterministic reconciliation, employee decisions, a bounded
+review agent and a Streamlit interface over the HTTP API.**
 The repository contains a FastAPI liveness endpoint, validated settings, exact
 money and purchasing models, seven basic validation reasons and an immutable
 workflow. Stage 03 persists it in PostgreSQL through Alembic migrations, with
@@ -26,11 +26,13 @@ event written in the same transaction. Stage 07 adds a bounded review agent
 behind a model-provider port: read-only tools with strict schemas and rights
 checks, limits on calls, time and result size, a check of the drafted next
 step against stored facts, and a trace without document text; it runs only
-deterministic offline providers. Isolated tests,
+deterministic offline providers. Stage 08 adds a Streamlit page for employees
+that reaches data only through the HTTP API, with intent-derived idempotency
+keys so repeated clicks and reloads never duplicate a command. Isolated tests,
 PostgreSQL integration tests, Ruff, strict mypy, a locked environment and a
 GitHub Actions workflow cover this work. Actual results and unverified items are
-recorded in [verification](docs/VERIFICATION.md). A real model adapter, a
-user interface and outbox delivery are planned.
+recorded in [verification](docs/VERIFICATION.md). A real model adapter,
+outbox delivery and hardening are planned.
 
 The planned design is a modular monolith. Deterministic code calculates amounts,
 checks rules and controls state transitions. The AI assistant proposes fields and
@@ -38,15 +40,16 @@ explanations; authorized employees make approval decisions. The tutorial does no
 initiate payments or act on real corporate systems.
 
 **Visual guides:** [Russian PDF](docs/guide/enterprise-workflow-agent-guide.pdf)
-and [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf), 32 pages
-each, with diagrams for stages 01–07.
+and [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf), 35 pages
+each, with diagrams for stages 01–08.
 
 **По-русски:** основа API — [этап 01](docs/STAGE_01.md), предметная модель,
 правила и состояния — [этап 02](docs/STAGE_02.md), хранение, транзакции и
 аудит — [этап 03](docs/STAGE_03.md), документы и происхождение полей —
 [этап 04](docs/STAGE_04.md), сверка счёта с заказом — [этап 05](docs/STAGE_05.md),
 решение сотрудника, роли и outbox — [этап 06](docs/STAGE_06.md),
-ограниченный AI-агент — [этап 07](docs/STAGE_07.md).
+ограниченный AI-агент — [этап 07](docs/STAGE_07.md), интерфейс Streamlit —
+[этап 08](docs/STAGE_08.md).
 Все этапы и критерии готовности — в [дорожной карте](docs/ROADMAP.md).
 
 ## Quickstart
@@ -221,6 +224,24 @@ only; no network or real model. `POST /workflows/{id}/agent-runs` needs the
 model propose fields through the Stage 04 port; the evidence check still
 applies. See [agent](docs/instructions/agent.md).
 
+## Employee interface
+
+```bash
+uv sync --locked --group ui
+uv run --locked python -m app.ui_demo_setup
+uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8003
+uv run --locked --group ui python -m streamlit run ui/app.py
+```
+
+The setup command prints fresh tokens for four fictional employees and writes
+three sample invoices to `var/ui-samples/`. The page (`http://127.0.0.1:8501`)
+lists workflows of the employee's units, shows document fields with their
+source lines, reconciliation with quoted discrepancies, the assistant's draft,
+the audit trail and outbox events, and sends check, reconcile, revise,
+approve and reject commands. It never reads the database or checks business
+rules itself; refusals are shown with the server's code and a hint. Streamlit
+is in the separate `ui` dependency group. See [interface](docs/instructions/ui.md).
+
 ## Stages
 
 | Stage | Deliverable | Status |
@@ -232,7 +253,7 @@ applies. See [agent](docs/instructions/agent.md).
 | 05 | Deterministic invoice reconciliation and discrepancy reports | Implemented; verified locally |
 | 06 | Employee approvals, roles and transactional outbox | Implemented; verified locally |
 | 07 | Bounded AI tools, demo provider and optional real model | Implemented with offline providers; no real model |
-| 08 | Streamlit interface through the HTTP API | Planned |
+| 08 | Streamlit interface through the HTTP API | Implemented; verified locally and in a browser |
 | 09 | Security, failure scenarios, evals and local sandbox event delivery | Planned |
 | 10 | Docker, expanded CI and reproducible release | Planned |
 
@@ -244,12 +265,13 @@ stage. Later modules are created with their first working feature.
 ```bash
 uv run --locked ruff check .
 uv run --locked ruff format --check .
-uv run --locked mypy app tests scripts migrations
-uv run --locked pytest
+uv run --locked --group ui mypy app tests scripts migrations ui
+uv run --locked --group ui pytest
 uv run --locked python scripts/check_docs.py
 ```
 
-Rebuild both PDF guides after changing code, migrations, `uv.lock` or
+Without `--group ui` the interface test modules are skipped. Rebuild both PDF
+guides after changing `app/`, `ui/`, migrations, `uv.lock` or
 `docs/guide/verification.json`; a test fails if they are stale:
 
 ```bash
@@ -269,9 +291,9 @@ not been verified.
 | Purpose | Source |
 | --- | --- |
 | Stage plan and completion criteria (RU) | [ROADMAP](docs/ROADMAP.md) |
-| Detailed learning guides (RU) | [STAGE 01](docs/STAGE_01.md), [STAGE 02](docs/STAGE_02.md), [STAGE 03](docs/STAGE_03.md), [STAGE 04](docs/STAGE_04.md), [STAGE 05](docs/STAGE_05.md), [STAGE 06](docs/STAGE_06.md), [STAGE 07](docs/STAGE_07.md) |
-| Short task instructions (EN) | [Quickstart](docs/instructions/quickstart.md), [API](docs/instructions/usage.md), [domain](docs/instructions/domain.md), [persistence](docs/instructions/persistence.md), [documents](docs/instructions/documents.md), [reconciliation](docs/instructions/reconciliation.md), [decisions](docs/instructions/decisions.md), [agent](docs/instructions/agent.md), [testing](docs/instructions/testing.md), [project structure](docs/instructions/project-structure.md) |
-| Design and decisions (EN) | [Approach](docs/APPROACH.md), [ADR 0001](docs/adr/0001-modular-monolith-and-tooling.md), [ADR 0002](docs/adr/0002-domain-rules-and-workflow.md), [ADR 0003](docs/adr/0003-postgresql-persistence-audit-idempotency.md), [ADR 0004](docs/adr/0004-document-intake-and-field-provenance.md), [ADR 0005](docs/adr/0005-deterministic-reconciliation.md), [ADR 0006](docs/adr/0006-employee-decisions-and-outbox.md), [ADR 0007](docs/adr/0007-bounded-review-agent.md) |
+| Detailed learning guides (RU) | [STAGE 01](docs/STAGE_01.md), [STAGE 02](docs/STAGE_02.md), [STAGE 03](docs/STAGE_03.md), [STAGE 04](docs/STAGE_04.md), [STAGE 05](docs/STAGE_05.md), [STAGE 06](docs/STAGE_06.md), [STAGE 07](docs/STAGE_07.md), [STAGE 08](docs/STAGE_08.md) |
+| Short task instructions (EN) | [Quickstart](docs/instructions/quickstart.md), [API](docs/instructions/usage.md), [domain](docs/instructions/domain.md), [persistence](docs/instructions/persistence.md), [documents](docs/instructions/documents.md), [reconciliation](docs/instructions/reconciliation.md), [decisions](docs/instructions/decisions.md), [agent](docs/instructions/agent.md), [interface](docs/instructions/ui.md), [testing](docs/instructions/testing.md), [project structure](docs/instructions/project-structure.md) |
+| Design and decisions (EN) | [Approach](docs/APPROACH.md), [ADR 0001](docs/adr/0001-modular-monolith-and-tooling.md), [ADR 0002](docs/adr/0002-domain-rules-and-workflow.md), [ADR 0003](docs/adr/0003-postgresql-persistence-audit-idempotency.md), [ADR 0004](docs/adr/0004-document-intake-and-field-provenance.md), [ADR 0005](docs/adr/0005-deterministic-reconciliation.md), [ADR 0006](docs/adr/0006-employee-decisions-and-outbox.md), [ADR 0007](docs/adr/0007-bounded-review-agent.md), [ADR 0008](docs/adr/0008-streamlit-client-over-http.md) |
 | CI explanation (RU) | [CI/CD](docs/CI_CD.md) |
 | Work completed and check evidence (RU) | [Development log](docs/DEVELOPMENT_LOG.md), [verification](docs/VERIFICATION.md) |
 | Visual PDF guides (RU and EN) | [Russian PDF](docs/guide/enterprise-workflow-agent-guide.pdf), [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf), [how they are built](docs/guide/README.md) |

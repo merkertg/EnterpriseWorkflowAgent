@@ -27,6 +27,10 @@ dev = [
 guide = [
     "reportlab==4.4.9",
 ]
+# Stage 08 Streamlit client only; it talks to the HTTP API, never the database.
+ui = [
+    "streamlit>=1.65,<2",
+]
 
 [tool.uv]
 # Resolve releases at least two weeks old at this project's start date.

@@ -1,9 +1,9 @@
 """Fingerprint of everything the PDF guide is built from.
 
 The build stores this hash in the PDF metadata. A test recomputes it, so a
-change to the generator, verification.json, application code, migrations or
-uv.lock without rebuilding both PDFs fails the test suite. Standard library
-only: the test runs without ReportLab.
+change to the generator, verification.json, application or interface
+code, migrations or uv.lock without rebuilding both PDFs fails the test
+suite. Standard library only: the test runs without ReportLab.
 """
 
 import hashlib
@@ -21,6 +21,7 @@ def source_files(root: Path = PROJECT_ROOT) -> list[Path]:
         "docs/guide/verification.json",
         "uv.lock",
         "app/**/*.py",
+        "ui/**/*.py",
         "migrations/versions/*.py",
     )
     files = {

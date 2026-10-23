@@ -208,8 +208,8 @@ def add_stage01(story: list[Any], facts: Facts) -> None:
         code_block(
             "uv run --locked ruff check .\n"
             "uv run --locked ruff format --check .\n"
-            "uv run --locked mypy app tests scripts migrations\n"
-            "uv run --locked pytest\n"
+            "uv run --locked --group ui mypy app tests scripts migrations ui\n"
+            "uv run --locked --group ui pytest\n"
             "uv run --locked python scripts/check_docs.py"
         ),
         Spacer(1, 8),
@@ -260,19 +260,19 @@ def add_stage01(story: list[Any], facts: Facts) -> None:
         Spacer(1, 6),
         code_block(
             "TEST_DATABASE_URL=postgresql+psycopg://USER:PASSWORD@127.0.0.1:5432/"
-            "enterprise_workflow_test \\\n  uv run --locked pytest"
+            "enterprise_workflow_test \\\n  uv run --locked --group ui pytest"
         ),
         p(tr("GitHub Actions", "GitHub Actions"), H2),
         p(
             tr(
-                "Workflow .github/workflows/ci.yml запускает сервис postgres:18.3 "
-                "(закреплён по digest), применяет миграции, проверяет alembic check и "
-                "выполняет все тесты с REQUIRE_TEST_DATABASE=1: потерянный адрес базы "
-                "превращается в ошибку, а не в пропуск.",
-                "The .github/workflows/ci.yml workflow starts a postgres:18.3 service "
-                "(pinned by digest), applies migrations, runs alembic check and every "
-                "test with REQUIRE_TEST_DATABASE=1, so a lost database URL fails "
-                "instead of skipping.",
+                "Workflow .github/workflows/ci.yml ставит группу ui, запускает сервис "
+                "postgres:18.3 (закреплён по digest), применяет миграции, проверяет "
+                "alembic check и выполняет все тесты с REQUIRE_TEST_DATABASE=1: "
+                "потерянный адрес базы превращается в ошибку, а не в пропуск.",
+                "The .github/workflows/ci.yml workflow installs the ui group, starts a "
+                "postgres:18.3 service (pinned by digest), applies migrations, runs "
+                "alembic check and every test with REQUIRE_TEST_DATABASE=1, so a lost "
+                "database URL fails instead of skipping.",
             )
         ),
         Spacer(1, 6),

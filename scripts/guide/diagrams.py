@@ -35,7 +35,7 @@ from guide.layout import (
     rbox,
 )
 
-STAGES_DONE = 7
+STAGES_DONE = 8
 
 
 def roadmap() -> Diagram:
@@ -931,3 +931,167 @@ def injection_path() -> Diagram:
         )
 
     return Diagram(92, draw)
+
+
+def ui_layers() -> Diagram:
+    """The page is an HTTP client; only the API reaches the database."""
+
+    def draw(c: Canvas, w: float, h: float) -> None:
+        """Draw browser, page, client, API and database left to right."""
+        gap, bh = 16, 64
+        bw = (w - 4 * gap) / 5
+        y = h - bh - 26
+        boxes = [
+            (
+                tr("Браузер", "Browser"),
+                tr("токен в сессии", "token in session"),
+                SLATE_L,
+                MUTED,
+            ),
+            ("ui/app.py", "Streamlit", VIOLET_L, VIOLET),
+            (
+                "ApiClient",
+                tr("urllib, только http(s)", "urllib, http(s) only"),
+                AMBER_L,
+                AMBER,
+            ),
+            (
+                "HTTP API",
+                tr("Bearer, права, ключ", "Bearer, rights, key"),
+                BLUE_L,
+                BLUE,
+            ),
+            ("PostgreSQL", tr("только через API", "only via the API"), TEAL_L, TEAL),
+        ]
+        for index, (title, sub, fill, edge) in enumerate(boxes):
+            x = index * (bw + gap)
+            node(c, x, y, bw, bh, title, sub, fill, edge, 9.6, 7.6)
+            if index:
+                arrow(c, x - gap + 1, y + bh / 2, x - 1, y + bh / 2)
+        # The forbidden shortcut: the page never imports app or the database.
+        start_x, end_x = bw * 1.5 + gap, 4 * (bw + gap) + bw / 2
+        line_y = y + bh + 12
+        c.setStrokeColor(RED)
+        c.setLineWidth(1.1)
+        c.setDash([3, 3])
+        c.line(start_x, y + bh, start_x, line_y)
+        c.line(start_x, line_y, end_x, line_y)
+        c.line(end_x, line_y, end_x, y + bh)
+        c.setDash([])
+        c.setFillColor(RED)
+        draw_text(
+            c,
+            (start_x + end_x) / 2,
+            line_y + 4,
+            tr(
+                "запрещено тестом архитектуры: ui/ не импортирует app и библиотеки базы",
+                "forbidden by the architecture test: ui/ imports no app or database code",
+            ),
+            "PT",
+            7.8,
+            "center",
+        )
+        c.setFillColor(MUTED)
+        c.setFont("PT-Italic", 8.4)
+        c.drawString(
+            0,
+            6,
+            tr(
+                "Страница отправляет запрос и показывает ответ сервера, в том числе отказ.",
+                "The page sends a request and shows the server's answer, refusals included.",
+            ),
+        )
+
+    return Diagram(130, draw)
+
+
+def repeat_paths() -> Diagram:
+    """Same intent, same key: a stored result; a rerun with fresh data: a refusal."""
+
+    def draw(c: Canvas, w: float, h: float) -> None:
+        """Draw the key derivation and the two outcomes of a repeated click."""
+        bh = 50
+        top = h - bh - 4
+        bw = (w - 2 * 18) / 3
+        node(
+            c,
+            0,
+            top,
+            bw,
+            bh,
+            tr("Намерение", "Intent"),
+            tr(
+                "действие, процесс, версия, снимок",
+                "action, workflow, version, snapshot",
+            ),
+            VIOLET_L,
+            VIOLET,
+            9.6,
+            7.6,
+        )
+        node(
+            c, bw + 18, top, bw, bh, "SHA-256", "ui-approve-…", SLATE_L, MUTED, 9.6, 7.6
+        )
+        node(
+            c,
+            2 * (bw + 18),
+            top,
+            bw,
+            bh,
+            "Idempotency-Key",
+            tr("сервер добавляет ID сотрудника", "server adds the user ID"),
+            BLUE_L,
+            BLUE,
+            9.6,
+            7.6,
+        )
+        arrow(c, bw + 1, top + bh / 2, bw + 17, top + bh / 2)
+        arrow(c, 2 * bw + 19, top + bh / 2, 2 * bw + 35, top + bh / 2)
+        low = 26
+        half = (w - 18) / 2
+        node(
+            c,
+            0,
+            low,
+            half,
+            bh,
+            tr("Тот же запрос снова", "The same request again"),
+            tr(
+                "форма ещё раз, другая вкладка, перезагрузка → сохранённый результат",
+                "form again, another tab, reload → stored result",
+            ),
+            GREEN_L,
+            GREEN,
+            9.4,
+            7.6,
+        )
+        node(
+            c,
+            half + 18,
+            low,
+            half,
+            bh,
+            tr("Клик со старой страницы", "A click from an old page"),
+            tr(
+                "перезапуск читает версию 3 → invalid_transition",
+                "the rerun reads version 3 → invalid_transition",
+            ),
+            AMBER_L,
+            AMBER,
+            9.4,
+            7.6,
+        )
+        arrow(c, 2 * (bw + 18) + bw / 2, top - 1, half / 2, low + bh + 1)
+        arrow(c, 2 * (bw + 18) + bw / 2, top - 1, half + 18 + half / 2, low + bh + 1)
+        c.setFillColor(MUTED)
+        c.setFont("PT-Italic", 8.4)
+        c.drawString(
+            0,
+            6,
+            tr(
+                "В обоих случаях второго решения нет: одно событие outbox.",
+                "Either way there is no second decision: one outbox event.",
+            ),
+        )
+
+    return Diagram(170, draw)

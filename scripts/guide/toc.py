@@ -36,6 +36,9 @@ CONTENTS = [
     ("Агент и его границы", "The agent and its bounds"),
     ("Инструменты и отказы", "Tools and refusals"),
     ("Черновик и трассировка", "Draft check and trace"),
+    ("Интерфейс поверх API", "An interface over the API"),
+    ("Повтор и перезагрузка", "Repeats and reloads"),
+    ("Ошибки и проверка страницы", "Errors and page checks"),
     ("Шпаргалка команд", "Command cheat sheet"),
     ("Типичные ошибки", "Common errors"),
     ("Проверь себя", "Check yourself"),
@@ -51,6 +54,7 @@ STAGE_SECTIONS = {
     "05": range(18, 21),
     "06": range(21, 25),
     "07": range(25, 28),
+    "08": range(28, 31),
 }
 
 

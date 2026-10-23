@@ -17,6 +17,8 @@ FRAMEWORKS = (
 FORBIDDEN = {
     "app/domain": (*FRAMEWORKS, "psycopg", "app.application", "app.infrastructure"),
     "app/application": (*FRAMEWORKS, "psycopg", "app.infrastructure", "app.api"),
+    # The interface is an HTTP client: no application code, no database.
+    "ui": ("app", "sqlalchemy", "psycopg", "alembic", "pypdf", "fastapi"),
 }
 
 

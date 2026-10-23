@@ -36,6 +36,7 @@ from app.domain.rules import IssueCode
 from app.domain.workflow import WorkflowState
 from app.infrastructure.db.models import APPEND_ONLY_TABLES, Base
 from app.infrastructure.extraction.labeled_text import EXTRACTOR_NAME
+from ui.presenters import ERROR_HINTS
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SHOWN_PACKAGES = (
@@ -86,6 +87,7 @@ class Facts:
     stop_reasons: tuple[str, ...]
     next_steps: tuple[str, ...]
     step_kinds: tuple[str, ...]
+    ui_hints: tuple[tuple[str, str], ...]
 
 
 def read_source(relative: str) -> str:
@@ -164,6 +166,7 @@ def load_facts() -> Facts:
         stop_reasons=tuple(item.value for item in AgentStopReason),
         next_steps=tuple(item.value for item in NextStep),
         step_kinds=tuple(item.value for item in AgentStepKind),
+        ui_hints=tuple(ERROR_HINTS.items()),
     )
 
 

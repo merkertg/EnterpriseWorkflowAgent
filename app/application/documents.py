@@ -42,6 +42,7 @@ from app.domain.extraction import (
     FieldStatus,
     assess_extraction,
 )
+from app.domain.models import validate_text
 
 _STORE_ATTEMPTS = 3
 
@@ -281,6 +282,44 @@ class DocumentService:
         if extraction is None:
             raise NotFoundError("Document or extraction was not found.")
         return extraction
+
+    def workflow_evidence(
+        self, workflow_id: str, *, actor: Principal | None = None
+    ) -> tuple[StoredDocument, StoredExtraction, tuple[FieldEvidence, ...]] | None:
+        """Return the document behind a workflow's invoice with cited fields.
+
+        An actor must be able to view the workflow's business unit. A
+        workflow whose invoice was created in code has no document: None.
+        """
+        workflow_id = validate_text(workflow_id, "workflow_id")
+        with self._unit_of_work() as unit:
+            stored = unit.repository.get_workflow(workflow_id)
+            if stored is None:
+                raise NotFoundError("Workflow was not found.")
+            current_principal(unit, actor, Permission.VIEW, stored.business_unit)
+            extraction = unit.documents.first_extraction_for_invoice(
+                stored.invoice_version.version_id
+            )
+            if extraction is None:
+                return None
+            document = unit.documents.get_document(extraction.document_id)
+            pages = unit.documents.get_pages(extraction.document_id)
+        if document is None:
+            raise StoredDataIntegrityError("The extraction's document is missing.")
+        evidence = tuple(
+            FieldEvidence(
+                document.document_id,
+                extraction.result.extractor,
+                item,
+                tuple(
+                    cite(pages, span.page, span.start, span.end)
+                    for span in item.evidence
+                    if span.quote(pages) is not None
+                ),
+            )
+            for item in extraction.result.fields
+        )
+        return document, extraction, evidence
 
     def get_evidence(self, document_id: UUID, field_name: str) -> FieldEvidence:
         """Open the source text behind one field, re-checking it on the way."""

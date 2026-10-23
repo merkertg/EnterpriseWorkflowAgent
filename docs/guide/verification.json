@@ -1,6 +1,6 @@
 {
   "project": "enterprise-workflow-agent",
-  "stage": "07",
+  "stage": "08",
   "implemented_stages": [
     "01",
     "02",
@@ -8,13 +8,14 @@
     "04",
     "05",
     "06",
-    "07"
+    "07",
+    "08"
   ],
   "status": "implemented_locally_verified",
   "verified_on": "2026-10-23",
   "timezone": "Asia/Tashkent",
   "git": {
-    "base_commit": "1f8dd68",
+    "base_commit": "1b46aae",
     "base_commit_pushed_to": "main",
     "scope": "uncommitted_working_tree",
     "committed": false,
@@ -37,19 +38,22 @@
     "ruff": "0.16.10",
     "mypy": "2.4.0",
     "httpx2": "2.13.1",
-    "postgresql": "18.3 (Homebrew, temporary cluster on 127.0.0.1:55433)"
+    "postgresql": "18.3 (Homebrew, temporary cluster on 127.0.0.1:55433)",
+    "streamlit": "1.65.0",
+    "local_venv_note": "iCloud Desktop sync left ' 2' copies in .venv; numpy and itsdangerous were reinstalled from uv.lock before the final runs"
   },
   "tests": {
-    "total": 465,
-    "postgres": 98,
+    "total": 493,
+    "postgres": 104,
+    "dependency_groups": "dev + ui",
     "with_database": {
-      "passed": 465,
+      "passed": 493,
       "failed": 0,
       "skipped": 0
     },
     "without_database": {
-      "passed": 367,
-      "skipped": 98
+      "passed": 389,
+      "skipped": 104
     }
   },
   "checks": [
@@ -62,41 +66,62 @@
       "status": "passed"
     },
     {
+      "command": "uv sync --locked --group ui",
+      "status": "passed",
+      "streamlit": "1.65.0"
+    },
+    {
       "command": "uv run --locked ruff check .",
       "status": "passed"
     },
     {
       "command": "uv run --locked ruff format --check .",
       "status": "passed",
-      "files": 162
+      "files": 177
+    },
+    {
+      "command": "uv run --locked --group ui mypy app tests scripts migrations ui",
+      "status": "passed",
+      "source_files": 142
     },
     {
       "command": "uv run --locked mypy app tests scripts migrations",
       "status": "passed",
-      "source_files": 130
+      "source_files": 137
     },
     {
-      "command": "uv run --locked pytest",
+      "command": "uv run --locked --group ui pytest",
       "database": "none",
       "status": "passed",
-      "passed": 367,
+      "passed": 389,
       "failed": 0,
-      "skipped": 98
+      "skipped": 104
     },
     {
-      "command": "REQUIRE_TEST_DATABASE=1 TEST_DATABASE_URL=... uv run --locked pytest",
+      "command": "REQUIRE_TEST_DATABASE=1 TEST_DATABASE_URL=... uv run --locked --group ui pytest",
       "database": "enterprise_workflow_test",
       "status": "passed",
-      "passed": 465,
+      "passed": 493,
       "failed": 0,
       "skipped": 0
     },
     {
-      "command": "uv run --locked pytest -m postgres",
+      "command": "TEST_DATABASE_URL=... uv run --locked pytest (no ui group)",
+      "status": "passed",
+      "passed": 482,
+      "skipped_modules": 2,
+      "env": "REQUIRE_TEST_DATABASE=1",
+      "without_database": {
+        "passed": 382,
+        "skipped": 102
+      }
+    },
+    {
+      "command": "uv run --locked --group ui pytest -m postgres",
       "database": "enterprise_workflow_test",
       "status": "passed",
-      "passed": 98,
-      "deselected": 367
+      "passed": 104,
+      "deselected": 389
     },
     {
       "command": "uv run --locked alembic upgrade head",
@@ -104,7 +129,7 @@
       "revision": "0005"
     },
     {
-      "command": "uv run --locked alembic downgrade 0004 && uv run --locked alembic upgrade head",
+      "command": "uv run --locked alembic downgrade 0004, then upgrade head",
       "status": "passed"
     },
     {
@@ -118,36 +143,32 @@
       "create_table_statements": 22
     },
     {
-      "command": "uv run --locked python -m app.agent_demo",
+      "command": "uv run --locked python -m app.ui_demo_setup",
+      "status": "passed"
+    },
+    {
+      "command": "demos: agent, decisions, reconciliation, documents, persistence, domain",
       "status": "passed",
-      "network": false
+      "commands": [
+        "uv run --locked python -m app.agent_demo",
+        "uv run --locked python -m app.decisions_demo",
+        "uv run --locked python -m app.reconciliation_cli demo",
+        "uv run --locked python -m app.documents_cli demo",
+        "uv run --locked python -m app.persistence_demo",
+        "uv run --locked python -m app.demo"
+      ]
     },
     {
-      "command": "uv run --locked python -m app.decisions_demo",
-      "status": "passed"
-    },
-    {
-      "command": "uv run --locked python -m app.reconciliation_cli demo",
-      "status": "passed"
-    },
-    {
-      "command": "uv run --locked python -m app.documents_cli demo",
-      "status": "passed"
-    },
-    {
-      "command": "uv run --locked python -m app.persistence_demo",
-      "status": "passed"
-    },
-    {
-      "command": "uv run --locked python -m app.demo",
-      "status": "passed"
+      "command": "browser check: uvicorn + streamlit, full scenario",
+      "status": "passed",
+      "steps": "sign-in, upload, start, reconcile, 403, approve, repeated click, reload"
     },
     {
       "command": "uv run --locked --group guide python scripts/build_guide.py",
       "status": "passed",
       "pages": {
-        "ru": 32,
-        "en": 32
+        "ru": 35,
+        "en": 35
       }
     },
     {
@@ -158,8 +179,8 @@
     {
       "command": "uv run --locked python scripts/check_docs.py",
       "status": "passed",
-      "links": 249,
-      "files": 32,
+      "links": 271,
+      "files": 35,
       "scope": "local_inline_markdown_target_files_only"
     },
     {
@@ -169,17 +190,10 @@
   ],
   "http_smoke": {
     "status": "passed",
-    "checked_stage": "07",
+    "checked_stage": "08",
     "repeated_since": false,
-    "server": "uvicorn app.main:app on 127.0.0.1:8003 with DATABASE_URL",
-    "endpoints": {
-      "/health": 200,
-      "POST /workflows/{id}/agent-runs without token": 401,
-      "POST /workflows/{id}/agent-runs (clerk)": 200,
-      "GET /agent-runs/{run_id} (clerk)": 200,
-      "GET /workflows/{id} after the run": 200
-    },
-    "result": "final_answer, ready_for_approval, demo-rules/1; stored run has no explanation; workflow still awaiting_approval v2"
+    "server": "uvicorn on 127.0.0.1:8003 and streamlit on 127.0.0.1:8501, built-in browser",
+    "result": "clerk signs in, uploads clean.txt, starts and reconciles (matched); clerk approve 403 missing_permission; approver approves (approved v3); second click 409 invalid_transition; one outbox event; reload asks for the token again"
   },
   "remote_ci": {
     "status": "not_verified",
@@ -190,7 +204,8 @@
       "8b697f7",
       "00eb76e",
       "247762f",
-      "1f8dd68"
+      "1f8dd68",
+      "1b46aae"
     ]
   },
   "real_llm": {
@@ -244,7 +259,8 @@
     "tables": 21,
     "append_only_tables": 18,
     "stale_version_detection": "implemented_stage_05",
-    "existing_workflows_unit": "unassigned"
+    "existing_workflows_unit": "unassigned",
+    "new_tables_stage_08": 0
   },
   "human_approvals": {
     "status": "implemented_locally_verified",
@@ -282,23 +298,23 @@
       "docs/guide/enterprise-workflow-agent-guide-en.pdf"
     ],
     "pages": {
-      "ru": 32,
-      "en": 32
+      "ru": 35,
+      "en": 35
     },
-    "sections": 31,
+    "sections": 34,
     "generator": "scripts/build_guide.py",
     "reportlab": "4.4.9 (uv dependency group guide)",
     "fonts": "PT Sans / PT Mono (macOS)",
     "freshness_check": "source-sha256 in PDF keywords, tests/test_guide_pdfs.py",
-    "visual_check": "all 64 pages; cover and changed pages re-checked after the final build",
+    "visual_check": "all 70 pages (35 RU + 35 EN) at 70 dpi",
     "linux_build": "not_verified"
   },
-  "next_stage": "08",
+  "next_stage": "09",
   "repeated_runs": {
     "files": [
-      "tests/persistence/test_agent.py",
-      "tests/application/test_agent_runner.py",
-      "tests/persistence/test_decisions.py"
+      "tests/ui/",
+      "tests/persistence/test_ui_flow.py",
+      "tests/persistence/test_ui_setup_cli.py"
     ],
     "runs": 8,
     "failures": 0
@@ -352,5 +368,24 @@
     ],
     "new_tests_without_database": 62,
     "new_tests_with_database": 11
+  },
+  "ui": {
+    "status": "implemented_locally_verified",
+    "framework": "Streamlit 1.65.0 (uv dependency group ui)",
+    "data_access": "HTTP API only; architecture test forbids app, sqlalchemy, psycopg, alembic, pypdf, fastapi imports in ui/",
+    "client": "standard library urllib, http(s) only, quoted path segments, ApiError without token",
+    "idempotency": "Idempotency-Key = sha256 of action, workflow, version and relevant inputs",
+    "token_storage": "page session only; a reload asks again",
+    "new_endpoints": [
+      "GET /workflows",
+      "GET /workflows/{id}/document"
+    ],
+    "pages": [
+      "Workflows",
+      "New invoice"
+    ],
+    "browser_check": "passed in the desktop app's built-in browser on macOS",
+    "new_tests_without_database": 22,
+    "new_tests_with_database": 6
   }
 }

@@ -65,6 +65,8 @@ result with `"replayed": true`; the same key with other arguments is
 | `GET /workflows/{id}/outbox` | `view` | Stored decision events |
 | `POST /workflows/{id}/agent-runs` | `assist` | Run the bounded review agent (provider `demo-rules/1`); returns the explanation once, the checked draft and the trace |
 | `GET /agent-runs/{run_id}` | `view` | A stored run and trace; the explanation is not stored, only its hash and length |
+| `GET /workflows?state=&limit=` | `view` | Recently changed workflows of the caller's units (limit 1-500, default 100) |
+| `GET /workflows/{id}/document` | `view` | Source document, extraction status, problems and fields with citations; 404 for invoices created in code |
 
 Request bodies reject unknown fields and use strict types (`"2"` is not a
 version). Uploads are read only up to 1 MiB; a larger body is `413 too_large`.
@@ -105,4 +107,5 @@ including the bearer scheme and the `Idempotency-Key` header.
 Command-line tools remain available: [domain](domain.md),
 [persistence](persistence.md), [documents](documents.md),
 [reconciliation](reconciliation.md), [decisions](decisions.md) and
-[agent](agent.md).
+[agent](agent.md). The Stage 08 Streamlit page is another client of this API;
+see [interface](ui.md).

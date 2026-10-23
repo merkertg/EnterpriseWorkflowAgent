@@ -5,13 +5,18 @@
 Run from the repository root:
 
 ```bash
-uv sync --locked
+uv sync --locked --group ui
 uv run --locked ruff check .
 uv run --locked ruff format --check .
-uv run --locked mypy app tests scripts migrations
-uv run --locked pytest
+uv run --locked --group ui mypy app tests scripts migrations ui
+uv run --locked --group ui pytest
 uv run --locked python scripts/check_docs.py
 ```
+
+The `ui` group installs Streamlit for the Stage 08 interface. Without it,
+`uv run --locked mypy app tests scripts migrations` and `uv run --locked
+pytest` still work: the two interface test modules that need Streamlit are
+reported as skipped modules, so read the pytest summary.
 
 Ruff checks Python issues and formatting; `--check` does not rewrite files.
 mypy checks type annotations in strict mode. pytest checks runtime behavior.
@@ -115,9 +120,22 @@ including real staleness, rights for runs, tools and traces, shortened and
 marked document values, model fields through document intake, the agent HTTP
 endpoints and the demo in separate processes.
 
+Stage 08 tests check the interface's HTTP client without a server (http(s)
+only, token and key headers, quoted paths, raw uploads, error details,
+unreachable servers without the token in messages, 404 as "nothing yet",
+stable keys and table rows), the Streamlit page headless with a fake client
+through `streamlit.testing.v1.AppTest` (token prompt, bad URL, 401, empty
+list, missing document and reconciliation, refused approval with reasons,
+replaced agent draft, refused and review-only uploads), and the page end to
+end against the real API and PostgreSQL: the full scenario, a repeated start
+form answered from the stored result, a click from an outdated page refused
+with one outbox event, rights, staleness and recovery, a document
+instruction and the assistant. API tests cover the new workflow list and
+document endpoints; the setup command runs twice in separate processes.
+
 `tests/test_guide_pdfs.py` checks both PDF guides with pypdf: the source
 fingerprint stored in each PDF must match a fresh hash of the generator,
-`docs/guide/verification.json`, `app/`, migrations and `uv.lock`; every section
+`docs/guide/verification.json`, `app/`, `ui/`, migrations and `uv.lock`; every section
 title must be present; the English guide must contain no Cyrillic. If it
 fails, rebuild with `uv run --locked --group guide python scripts/build_guide.py`
 and inspect every page as described in the [guide README](../guide/README.md).

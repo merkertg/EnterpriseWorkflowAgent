@@ -22,7 +22,7 @@ real supplier or modify a production ERP system.
 
 ## Delivery strategy
 
-Stages 01–07 are implemented. Stage 01 establishes a small FastAPI service,
+Stages 01–08 are implemented. Stage 01 establishes a small FastAPI service,
 environment settings, tests, static checks and documentation. Stage 02 adds a
 standard-library domain with immutable purchasing models, exact money, seven
 basic rule findings and in-memory workflow transitions.
@@ -43,6 +43,9 @@ transactional outbox ([ADR 0006](adr/0006-employee-decisions-and-outbox.md));
 Stage 07 adds a bounded review agent behind a model-provider port with
 deterministic offline providers ([ADR 0007](adr/0007-bounded-review-agent.md));
 `uv run --locked python -m app.agent_demo` exercises it.
+Stage 08 adds a Streamlit page that is a plain HTTP client of the API
+([ADR 0008](adr/0008-streamlit-client-over-http.md)); start it with
+`uv run --locked --group ui python -m streamlit run ui/app.py`.
 The default local port is `8003`. The first endpoint is `GET /health`; with
 default settings it returns:
 
@@ -93,6 +96,8 @@ app/
   users_cli.py            # Employee accounts and API tokens
   decisions_demo.py       # Fictional Stage 06 decision scenario
   agent_demo.py           # Fictional offline Stage 07 agent scenarios
+  ui_demo_setup.py        # Fictional employees, tokens and samples for the page
+ui/                       # Streamlit page and its HTTP client; no app imports
 migrations/               # Alembic environment and revisions
 tests/
 ```
@@ -221,9 +226,10 @@ fingerprint and a test keep them from silently falling behind the code.
 
 Since Stage 06 the HTTP API covers document upload, workflow commands,
 reconciliation, decisions, audit and outbox reads with bearer tokens. Since Stage 07
-a bounded agent runs with deterministic offline providers. Account management
-over HTTP, token expiry and SSO, outbox delivery, a real model adapter, manual
-field correction and a user interface remain unimplemented. The wider project does not
+a bounded agent runs with deterministic offline providers, and since Stage 08
+a Streamlit page uses the same API. Account management over HTTP, token expiry
+and SSO, outbox delivery, a real model adapter and manual field correction
+remain unimplemented. The wider project does not
 promise production readiness, real payments, autonomous approval or unrestricted
 code execution. OCR, multi-tenant operation and production ERP connectors require
 separate decisions and acceptance criteria.
