@@ -105,6 +105,9 @@ evidence = service.get_evidence(result.document.document_id, "declared_total")
 `service.prepare()` (or `prepare_document()`) runs every check without a
 database; `service.store(prepared)` writes it.
 
+Stage 05 reconciliation cites these evidence spans for each discrepancy; see
+[reconciliation](reconciliation.md).
+
 ## Limits
 
 Text-layer PDFs and the training label format only; no OCR; ASCII-only sample

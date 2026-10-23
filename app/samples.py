@@ -64,6 +64,33 @@ def instruction_invoice_text() -> str:
     )
 
 
+def invoice_text(
+    invoice_id: str,
+    purchase_order_id: str,
+    lines: Sequence[tuple[str, str, str, str]],
+    total: str,
+    *,
+    supplier_id: str = "DEMO-SUPPLIER-001",
+    currency: str = "USD",
+) -> str:
+    """Build a fictional invoice in the labelled format; lines are SKU, text,
+    quantity and unit price as written on the document."""
+    rows = [
+        "FICTIONAL INVOICE - TRAINING DATA ONLY",
+        f"Invoice number: {invoice_id}",
+        f"Supplier ID: {supplier_id}",
+        f"Purchase order: {purchase_order_id}",
+        f"Currency: {currency}",
+        *(
+            f"Line: {sku} | {text} | {quantity} | {price}"
+            for sku, text, quantity, price in lines
+        ),
+        f"Total due: {total}",
+        "",
+    ]
+    return "\n".join(rows)
+
+
 def _pdf_string(text: str) -> bytes:
     """Escape a PDF literal string; only printable ASCII is supported."""
     if not text.isascii() or not text.isprintable():

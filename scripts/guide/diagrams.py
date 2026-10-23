@@ -1,5 +1,7 @@
 """Diagrams drawn on the ReportLab canvas; texts follow the build language."""
 
+from reportlab.pdfbase import pdfmetrics
+
 from guide.i18n import tr
 from guide.layout import (
     AMBER,
@@ -23,6 +25,7 @@ from guide.layout import (
     Canvas,
     Diagram,
     arrow,
+    chip,
     circle_num,
     draw_text,
     lines_in,
@@ -30,7 +33,7 @@ from guide.layout import (
     rbox,
 )
 
-STAGES_DONE = 4
+STAGES_DONE = 5
 
 
 def roadmap() -> Diagram:
@@ -451,3 +454,135 @@ def pdf_worker() -> Diagram:
         )
 
     return Diagram(122, draw)
+
+
+def reconciliation_checks() -> Diagram:
+    """The four groups of checks and the codes each group can produce."""
+    groups = [
+        (
+            tr("Входы", "Inputs"),
+            tr(
+                "документ, дубликат, правила, заказ",
+                "document, duplicate, rules, order",
+            ),
+            [
+                "missing_source_document",
+                "duplicate_invoice",
+                "no_rule_for_currency",
+                "missing_purchase_order",
+            ],
+            AMBER_L,
+            AMBER,
+        ),
+        (
+            tr("Заголовок", "Header"),
+            tr("точное совпадение", "exact match"),
+            [
+                "purchase_order_reference_mismatch",
+                "supplier_mismatch",
+                "currency_mismatch",
+            ],
+            BLUE_L,
+            BLUE,
+        ),
+        (
+            tr("Строки по SKU", "Lines by SKU"),
+            tr("количество и цена единицы", "quantity and unit price"),
+            [
+                "unknown_line",
+                "quantity_exceeds_order",
+                "quantity_below_order",
+                "unit_price_mismatch",
+            ],
+            VIOLET_L,
+            VIOLET,
+        ),
+        (
+            tr("Итоги", "Totals"),
+            tr("допуск на итог", "total tolerance"),
+            ["declared_total_mismatch", "expected_total_mismatch"],
+            TEAL_L,
+            TEAL,
+        ),
+    ]
+
+    def draw(c: Canvas, w: float, h: float) -> None:
+        """Draw one band per group: a title box and its code chips."""
+        band_h, gap, label_w = 40, 8, 150
+        for index, (title, sub, codes, fill, edge) in enumerate(groups):
+            y = h - (index + 1) * band_h - index * gap
+            node(c, 0, y, label_w, band_h, title, sub, fill, edge, 9.5, 7.6)
+            x, row_y = label_w + 12, y + band_h - 17
+            for code in codes:
+                width = pdfmetrics.stringWidth(code, "Mono", 7.6) + 8
+                if x + width > w:
+                    x, row_y = label_w + 12, row_y - 17
+                chip(c, x, row_y, code, fill, INK)
+                x += width + 6
+            if index < len(groups) - 1:
+                arrow(c, label_w / 2, y - 1, label_w / 2, y - gap + 1)
+
+    return Diagram(4 * 40 + 3 * 8 + 4, draw)
+
+
+def snapshot_lifecycle() -> Diagram:
+    """A snapshot goes stale when inputs change; a new one becomes current."""
+
+    def draw(c: Canvas, w: float, h: float) -> None:
+        """Draw inputs, the first snapshot, the change and the new snapshot."""
+        bw, bh = (w - 3 * 22) / 4, 66
+        y = h - bh - 4
+        boxes = [
+            (
+                tr("Входы", "Inputs"),
+                tr(
+                    "счёт v1, заказ v1,\nправила v1, документ, поля",
+                    "invoice v1, order v1,\nrules v1, document, fields",
+                ),
+                SLATE_L,
+                MUTED,
+            ),
+            ("S1", tr("matched, актуален", "matched, current"), GREEN_L, GREEN),
+            (
+                "S1",
+                tr(
+                    "устарел: purchase_order_changed,\nrules_changed",
+                    "stale: purchase_order_changed,\nrules_changed",
+                ),
+                AMBER_L,
+                AMBER,
+            ),
+            (
+                "S2",
+                tr("новый снимок по v2,\nактуален", "new snapshot on v2,\ncurrent"),
+                GREEN_L,
+                GREEN,
+            ),
+        ]
+        labels = [
+            "reconcile",
+            tr("заказ v2, правила v2", "order v2, rules v2"),
+            "revise · check · reconcile",
+        ]
+        for index, (title, sub, fill, edge) in enumerate(boxes):
+            x = index * (bw + 22)
+            node(c, x, y, bw, bh, title, sub, fill, edge, 10.5, 7.6)
+            if index:
+                arrow(c, x - 21, y + bh / 2, x - 1, y + bh / 2)
+                c.setFillColor(MUTED)
+                c.setFont("PT", 7.4)
+                lines_in(
+                    c, x - 11, y - 4, bw * 0.9, labels[index - 1], "PT", 7.4, 9, MUTED
+                )
+        c.setFillColor(MUTED)
+        c.setFont("PT-Italic", 8.4)
+        c.drawString(
+            0,
+            4,
+            tr(
+                "S1 не меняется: reproduce(S1) из его собственных версий даёт тот же результат.",
+                "S1 never changes: reproduce(S1) from its own versions gives the same result.",
+            ),
+        )
+
+    return Diagram(118, draw)

@@ -26,6 +26,9 @@ CONTENTS = [
     ("Поля и цитаты", "Fields and evidence"),
     ("Проверка извлечения", "Assessing an extraction"),
     ("Хранение и командная строка", "Storage and command line"),
+    ("Правила сверки", "Reconciliation rules"),
+    ("Сверка строк", "Line reconciliation"),
+    ("Снимок и устаревание", "Snapshot and staleness"),
     ("Шпаргалка команд", "Command cheat sheet"),
     ("Типичные ошибки", "Common errors"),
     ("Проверь себя", "Check yourself"),
@@ -38,6 +41,7 @@ STAGE_SECTIONS = {
     "02": range(4, 7),
     "03": range(7, 13),
     "04": range(13, 18),
+    "05": range(18, 21),
 }
 
 

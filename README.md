@@ -6,8 +6,8 @@ document, extract fields with source evidence, apply corporate rules, show
 discrepancies, obtain an employee's decision and record the next process step.
 All examples will use fictional data.
 
-**Current scope: Stages 01–04 — API foundation, domain, PostgreSQL storage and
-document intake.**
+**Current scope: Stages 01–05 — API foundation, domain, PostgreSQL storage,
+document intake and deterministic reconciliation.**
 The repository contains a FastAPI liveness endpoint, validated settings, exact
 money and purchasing models, seven basic validation reasons and an immutable
 workflow. Stage 03 persists it in PostgreSQL through Alembic migrations, with
@@ -15,12 +15,14 @@ append-only hashed input versions, validation snapshots, a transactional audit
 trail, optimistic locking and idempotent commands. Stage 04 accepts bounded
 UTF-8 text and text-layer PDFs, extracts invoice fields deterministically and
 records the exact page and character span behind every value; incomplete
-extractions wait for review instead of producing an invoice. Isolated tests,
+extractions wait for review instead of producing an invoice. Stage 05
+reconciles invoice lines with the purchase order under versioned tolerance
+rules and stores reproducible snapshots that become stale when the order or
+rules change. Isolated tests,
 PostgreSQL integration tests, Ruff, strict mypy, a locked environment and a
 GitHub Actions workflow cover this work. Actual results and unverified items are
-recorded in [verification](docs/VERIFICATION.md). Detailed reconciliation,
-authenticated approvals, HTTP workflow and upload endpoints and an LLM are
-planned.
+recorded in [verification](docs/VERIFICATION.md). Authenticated approvals,
+HTTP workflow and upload endpoints and an LLM are planned.
 
 The planned design is a modular monolith. Deterministic code calculates amounts,
 checks rules and controls state transitions. The AI assistant proposes fields and
@@ -29,12 +31,12 @@ initiate payments or act on real corporate systems.
 
 **Visual guides:** [Russian PDF](docs/guide/enterprise-workflow-agent-guide.pdf)
 and [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf), 22 pages
-each, with diagrams for stages 01–04.
+each, with diagrams for stages 01–05.
 
 **По-русски:** основа API — [этап 01](docs/STAGE_01.md), предметная модель,
 правила и состояния — [этап 02](docs/STAGE_02.md), хранение, транзакции и
 аудит — [этап 03](docs/STAGE_03.md), документы и происхождение полей —
-[этап 04](docs/STAGE_04.md).
+[этап 04](docs/STAGE_04.md), сверка счёта с заказом — [этап 05](docs/STAGE_05.md).
 Все этапы и критерии готовности — в [дорожной карте](docs/ROADMAP.md).
 
 ## Quickstart
@@ -141,6 +143,24 @@ inside a document is data: an "approve this invoice" sentence changes nothing.
 Requires `DATABASE_URL` and migration `0002` for storage. See
 [documents](docs/instructions/documents.md).
 
+## Reconciliation
+
+```bash
+uv run --locked python -m app.reconciliation_cli demo
+uv run --locked python -m app.reconciliation_cli show SNAPSHOT_ID
+```
+
+A versioned rule set gives per-currency, inclusive tolerances for unit prices
+and totals and states its rounding (`ROUND_HALF_UP`, two decimals). Lines are
+matched by SKU; thirteen codes cover missing documents, orders or currency
+rules, duplicates, header and currency differences, unknown lines,
+quantities, prices and totals. Each discrepancy shows expected and actual
+values, the rule applied and a quote from the source document. Snapshots pin
+every input version and hash, are reused for identical inputs, report
+staleness after newer order or rule versions, and recompute exactly. Approval
+does not yet require a fresh matched snapshot (Stage 06). See
+[reconciliation](docs/instructions/reconciliation.md).
+
 ## Stages
 
 | Stage | Deliverable | Status |
@@ -149,7 +169,7 @@ Requires `DATABASE_URL` and migration `0002` for storage. See
 | 02 | Domain objects, workflow state machine and basic rules | Implemented; in-memory demo only |
 | 03 | PostgreSQL, migrations, transactional audit and idempotency | Implemented; PostgreSQL verified locally |
 | 04 | Safe text/PDF ingestion and fields with provenance | Implemented; verified locally |
-| 05 | Deterministic invoice reconciliation and discrepancy reports | Planned |
+| 05 | Deterministic invoice reconciliation and discrepancy reports | Implemented; verified locally |
 | 06 | Employee approvals, roles and transactional outbox | Planned |
 | 07 | Bounded AI tools, demo provider and optional real model | Planned |
 | 08 | Streamlit interface through the HTTP API | Planned |
@@ -189,9 +209,9 @@ not been verified.
 | Purpose | Source |
 | --- | --- |
 | Stage plan and completion criteria (RU) | [ROADMAP](docs/ROADMAP.md) |
-| Detailed learning guides (RU) | [STAGE 01](docs/STAGE_01.md), [STAGE 02](docs/STAGE_02.md), [STAGE 03](docs/STAGE_03.md), [STAGE 04](docs/STAGE_04.md) |
-| Short task instructions (EN) | [Quickstart](docs/instructions/quickstart.md), [API](docs/instructions/usage.md), [domain](docs/instructions/domain.md), [persistence](docs/instructions/persistence.md), [documents](docs/instructions/documents.md), [testing](docs/instructions/testing.md), [project structure](docs/instructions/project-structure.md) |
-| Design and decisions (EN) | [Approach](docs/APPROACH.md), [ADR 0001](docs/adr/0001-modular-monolith-and-tooling.md), [ADR 0002](docs/adr/0002-domain-rules-and-workflow.md), [ADR 0003](docs/adr/0003-postgresql-persistence-audit-idempotency.md), [ADR 0004](docs/adr/0004-document-intake-and-field-provenance.md) |
+| Detailed learning guides (RU) | [STAGE 01](docs/STAGE_01.md), [STAGE 02](docs/STAGE_02.md), [STAGE 03](docs/STAGE_03.md), [STAGE 04](docs/STAGE_04.md), [STAGE 05](docs/STAGE_05.md) |
+| Short task instructions (EN) | [Quickstart](docs/instructions/quickstart.md), [API](docs/instructions/usage.md), [domain](docs/instructions/domain.md), [persistence](docs/instructions/persistence.md), [documents](docs/instructions/documents.md), [reconciliation](docs/instructions/reconciliation.md), [testing](docs/instructions/testing.md), [project structure](docs/instructions/project-structure.md) |
+| Design and decisions (EN) | [Approach](docs/APPROACH.md), [ADR 0001](docs/adr/0001-modular-monolith-and-tooling.md), [ADR 0002](docs/adr/0002-domain-rules-and-workflow.md), [ADR 0003](docs/adr/0003-postgresql-persistence-audit-idempotency.md), [ADR 0004](docs/adr/0004-document-intake-and-field-provenance.md), [ADR 0005](docs/adr/0005-deterministic-reconciliation.md) |
 | CI explanation (RU) | [CI/CD](docs/CI_CD.md) |
 | Work completed and check evidence (RU) | [Development log](docs/DEVELOPMENT_LOG.md), [verification](docs/VERIFICATION.md) |
 | Visual PDF guides (RU and EN) | [Russian PDF](docs/guide/enterprise-workflow-agent-guide.pdf), [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf), [how they are built](docs/guide/README.md) |

@@ -52,7 +52,13 @@ OUTPUTS = {
     "ru": GUIDE_DIR / "enterprise-workflow-agent-guide.pdf",
     "en": GUIDE_DIR / "enterprise-workflow-agent-guide-en.pdf",
 }
-STAGE_COLOURS = {"01": "#93C5FD", "02": "#5EEAD4", "03": "#FDBA74", "04": "#C4B5FD"}
+STAGE_COLOURS = {
+    "01": "#93C5FD",
+    "02": "#5EEAD4",
+    "03": "#FDBA74",
+    "04": "#C4B5FD",
+    "05": "#86EFAC",
+}
 
 
 def cover_page(c: Canvas, doc: Any) -> None:
@@ -97,10 +103,10 @@ def cover_page(c: Canvas, doc: Any) -> None:
         tr(
             "Наглядное руководство: uv и FastAPI, точные деньги и правила, "
             "состояния процесса, PostgreSQL и миграции, транзакции, аудит и повторы, "
-            "приём документов и поля с цитатами источника.",
+            "приём документов с цитатами источника и построчная сверка с заказом.",
             "A visual guide: uv and FastAPI, exact money and rules, workflow states, "
             "PostgreSQL and migrations, transactions, audit and retries, document "
-            "intake and fields with source citations.",
+            "intake with source citations and line-by-line order reconciliation.",
         ),
         "PT",
         13.5,
@@ -165,7 +171,10 @@ def cover_page(c: Canvas, doc: Any) -> None:
                 tr("тестов прошли", "tests passed"),
             ),
             (str(len(facts.tables)), tr("таблиц PostgreSQL", "PostgreSQL tables")),
-            (str(len(facts.rejection_codes)), tr("кодов отказа", "rejection codes")),
+            (
+                str(len(facts.discrepancy_codes)),
+                tr("кодов расхождений", "discrepancy codes"),
+            ),
             (str(facts.lock_packages), tr("пакетов в uv.lock", "packages in uv.lock")),
         ],
         HEX("#1E293B"),
@@ -274,15 +283,16 @@ def build_guide(
             bottomMargin=17 * mm,
             title="Enterprise Workflow Agent - "
             + tr(
-                f"этапы 01–{STAGES_DONE:02d}: домен, хранение и документы",
-                f"stages 01–{STAGES_DONE:02d}: domain, storage and documents",
+                f"этапы 01–{STAGES_DONE:02d}: домен, хранение, документы и сверка",
+                f"stages 01–{STAGES_DONE:02d}: domain, storage, documents, "
+                "reconciliation",
             ),
             author="Enterprise Workflow Agent",
             subject=tr(
                 "uv, FastAPI, Decimal, PostgreSQL, Alembic, аудит, идемпотентность, "
-                "PDF и цитаты полей",
+                "PDF, цитаты полей и сверка",
                 "uv, FastAPI, Decimal, PostgreSQL, Alembic, audit, idempotency, "
-                "PDF and field evidence",
+                "PDF, field evidence and reconciliation",
             ),
             keywords=PREFIX + fingerprint,
             lang=lang,

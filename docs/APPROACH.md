@@ -22,7 +22,7 @@ real supplier or modify a production ERP system.
 
 ## Delivery strategy
 
-Stages 01–04 are implemented. Stage 01 establishes a small FastAPI service,
+Stages 01–05 are implemented. Stage 01 establishes a small FastAPI service,
 environment settings, tests, static checks and documentation. Stage 02 adds a
 standard-library domain with immutable purchasing models, exact money, seven
 basic rule findings and in-memory workflow transitions.
@@ -33,6 +33,9 @@ validation snapshots, audit, optimistic locking and idempotency;
 `uv run --locked python -m app.persistence_demo` exercises it. Stage 04 accepts
 bounded text and text-layer PDFs, extracts fields with verified source spans
 and is exercised by `uv run --locked python -m app.documents_cli demo`.
+Stage 05 reconciles invoice lines with the order under versioned tolerance
+rules ([ADR 0005](adr/0005-deterministic-reconciliation.md)), and
+`uv run --locked python -m app.reconciliation_cli demo` exercises it.
 The default local port is `8003`. The initial endpoint is `GET /health`; with
 default settings it returns:
 
@@ -75,6 +78,7 @@ app/
   persistence_demo.py     # Fictional PostgreSQL scenario and read-back command
   samples.py              # Fictional text/PDF samples and a tiny PDF writer
   documents_cli.py        # Document intake, evidence and demo commands
+  reconciliation_cli.py   # Reconciliation demo and snapshot reports
 migrations/               # Alembic environment and revisions
 tests/
 ```
@@ -145,10 +149,12 @@ stores an immutable snapshot of those IDs, hashes and findings. One transaction
 writes the idempotency record, snapshot, workflow update and audit event. Since
 Stage 04 an invoice version can also come from a stored document whose
 extraction records the source of every field.
-The Stage 05 reconciliation snapshot will add extracted-field versions and
-detailed results. Historical snapshots retain their original inputs instead of
-silently following the latest PO or policy. Stage 03 does not yet flag a pinned
-version as outdated when a newer one exists.
+Stage 05 reconciliation snapshots add the source document hash, the
+extraction and a hash of its fields, the rule version, duplicate context and
+line-level results. Historical snapshots retain their original inputs instead
+of silently following the latest PO or rules; freshness is computed against
+the currently applicable versions, and stale snapshots are recomputed exactly
+from their own inputs.
 
 An employee's approval references one reconciliation snapshot. Immediately before
 the transition, the application verifies that its source, PO and policy versions
@@ -189,8 +195,8 @@ fingerprint and a test keep them from silently falling behind the code.
 
 ## Current exclusions
 
-The HTTP API currently exposes only liveness. HTTP document upload, detailed
-reconciliation, authentication, HTTP workflow commands, an AI runtime, manual
+The HTTP API currently exposes only liveness. HTTP document upload,
+authentication, HTTP workflow commands, an AI runtime, manual
 field correction and a user interface remain unimplemented. The wider project does not
 promise production readiness, real payments, autonomous approval or unrestricted
 code execution. OCR, multi-tenant operation and production ERP connectors require

@@ -45,6 +45,7 @@ Stage 03 adds PostgreSQL persistence used through Python and
 not check the database. See [persistence](persistence.md).
 Stage 04 document intake is available through `python -m app.documents_cli`;
 the HTTP upload endpoint is planned with authorization in Stage 06. See
-[documents](documents.md).
+[documents](documents.md). Stage 05 reconciliation runs through
+`python -m app.reconciliation_cli`; see [reconciliation](reconciliation.md).
 
 For settings and server commands, see [Quickstart](quickstart.md).

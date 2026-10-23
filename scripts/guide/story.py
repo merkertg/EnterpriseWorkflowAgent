@@ -33,6 +33,7 @@ from guide.sources import Facts
 from guide.stage01_02 import add_stage01, add_stage02
 from guide.stage03 import add_stage03
 from guide.stage04 import add_stage04
+from guide.stage05 import add_stage05
 from guide.toc import section
 
 _REMOTE = {
@@ -136,6 +137,13 @@ def _overview(story: list[Any]) -> None:
                         "Text and PDF, limits, fields with citations, extraction assessment",
                     ),
                 ],
+                [
+                    "05",
+                    tr(
+                        "Сверка строк по правилам с допусками, снимки, устаревание",
+                        "Line reconciliation under tolerance rules, snapshots, staleness",
+                    ),
+                ],
             ],
             [50, W - 50],
         ),
@@ -204,6 +212,11 @@ def _cheat_sheet(story: list[Any]) -> None:
             tr("Открыть источник поля", "Open a field's source"),
         ),
         ("... documents_cli demo", tr("Демонстрация этапа 04", "Stage 04 demo")),
+        ("... reconciliation_cli demo", tr("Демонстрация этапа 05", "Stage 05 demo")),
+        (
+            "... reconciliation_cli show SNAPSHOT_ID",
+            tr("Отчёт снимка сверки", "Reconciliation snapshot report"),
+        ),
         ("uv run --locked ruff check .", tr("Линтер", "Linter")),
         (
             "uv run --locked mypy app tests scripts migrations",
@@ -330,6 +343,20 @@ def _common_errors(story: list[Any]) -> None:
             ),
         ),
         (
+            mono("no_rule_for_currency"),
+            tr(
+                "Добавь валюту в новую версию правил",
+                "Add the currency in a new rule version",
+            ),
+        ),
+        (
+            tr("Снимок сверки устарел", "Reconciliation snapshot is stale"),
+            tr(
+                "revise на новый заказ, затем check и reconcile",
+                "revise to the new order, then check and reconcile",
+            ),
+        ),
+        (
             tr("Тест свежести PDF упал", "PDF freshness test failed"),
             tr(
                 "Пересобери оба PDF и проверь страницы",
@@ -399,6 +426,14 @@ def _questions(story: list[Any]) -> None:
         tr(
             "Почему неполное извлечение не создаёт версию счёта?",
             "Why does an incomplete extraction create no invoice version?",
+        ),
+        tr(
+            "Зачем допуск на итог, если есть допуск на единицу?",
+            "Why a total tolerance when there is a unit tolerance?",
+        ),
+        tr(
+            "Почему старый снимок сверки не исправляют, а пересчитывают?",
+            "Why is an old reconciliation snapshot recomputed rather than edited?",
         ),
         tr(
             "Что пока не защищено и на каком этапе это появится?",
@@ -473,6 +508,7 @@ def _results(story: list[Any], verification: dict[str, Any]) -> None:
             ],
             [W - 80, 80],
             [CELL, CELL],
+            padding=2.5,
         ),
         Spacer(1, 8),
         callout(
@@ -490,12 +526,12 @@ def _results(story: list[Any], verification: dict[str, Any]) -> None:
         Spacer(1, 6),
         callout(
             tr(
-                "Не реализовано: полная сверка позиций и устаревание результатов (05), "
-                "вход, роли и HTTP-команды (06), модель (07), интерфейс (08), лимит "
-                "памяти PDF-процесса и outbox-доставка (09), Docker-выпуск (10).",
-                "Not implemented: full line reconciliation and stale results (05), "
-                "sign-in, roles and HTTP commands (06), a model (07), a UI (08), a "
-                "PDF worker memory limit and outbox delivery (09), Docker release (10).",
+                "Не реализовано: вход, роли, HTTP-команды и одобрение по свежему "
+                "снимку сверки (06), модель (07), интерфейс (08), лимит памяти "
+                "PDF-процесса и outbox-доставка (09), Docker-выпуск (10).",
+                "Not implemented: sign-in, roles, HTTP commands and approval on a fresh "
+                "reconciliation snapshot (06), a model (07), a UI (08), a PDF worker "
+                "memory limit and outbox delivery (09), Docker release (10).",
             ),
             GREEN,
             GREEN_L,
@@ -511,6 +547,7 @@ def build_story(facts: Facts, verification: dict[str, Any]) -> list[Any]:
     add_stage02(story, facts)
     add_stage03(story, facts)
     add_stage04(story, facts)
+    add_stage05(story, facts)
     _cheat_sheet(story)
     _common_errors(story)
     _questions(story)

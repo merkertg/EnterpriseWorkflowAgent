@@ -76,6 +76,15 @@ from an extraction, tamper detection, concurrent uploads and the CLI in
 separate processes. PDF tests start short-lived Python subprocesses; no extra
 service is needed.
 
+Stage 05 tests cover inclusive tolerance boundaries, price differences that
+add up, HALF_UP line rounding, quantities and partial billing, unknown lines,
+headers and currency, missing rules, orders and documents, duplicates,
+determinism, rule validation and hashes. Their PostgreSQL tests cover pinned
+inputs, snapshot reuse, quoted sources, staleness after order and rule
+changes, reproduction, re-reconciliation after `revise`, duplicates and
+rejection, invoices without documents or orders, edited rules, concurrent
+reconciliations and the CLI in separate processes.
+
 `tests/test_guide_pdfs.py` checks both PDF guides with pypdf: the source
 fingerprint stored in each PDF must match a fresh hash of the generator,
 `docs/guide/verification.json`, `app/`, migrations and `uv.lock`; every section

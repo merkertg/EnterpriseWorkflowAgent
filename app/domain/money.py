@@ -121,6 +121,19 @@ class Money:
             amount = self.amount + other.amount
         return Money(amount, self.currency)
 
+    def distance(self, other: Money) -> Decimal:
+        """Return |self - other| for same-currency amounts, for tolerance checks."""
+        if type(other) is not Money:
+            raise DomainValidationError(
+                "invalid_type", "other", "The other amount must be Money."
+            )
+        if self.currency is not other.currency:
+            raise DomainValidationError(
+                "currency_mismatch", "currency", "Money currencies must match."
+            )
+        with localcontext(_ARITHMETIC_CONTEXT):
+            return abs(self.amount - other.amount)
+
 
 def sum_money(values: tuple[Money, ...], currency: Currency) -> Money:
     """Sum a tuple in order, validating each currency and allowing an empty total."""

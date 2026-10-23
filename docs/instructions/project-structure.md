@@ -4,7 +4,7 @@
 
 Keep the initial application small and add a layer when it owns real behavior.
 
-## Implemented in Stages 01–04
+## Implemented in Stages 01–05
 
 | Location | Responsibility |
 | --- | --- |
@@ -21,14 +21,17 @@ Keep the initial application small and add a layer when it owns real behavior.
 | `app/domain/content_hash.py` | Canonical JSON and SHA-256 hashes of input versions |
 | `app/domain/documents.py` | Intake limits, format detection, text decoding and rejection codes |
 | `app/domain/extraction.py` | Field schema, evidence verification and completeness assessment |
+| `app/domain/reconciliation.py` | Reconciliation rules, discrepancy codes and the pure `reconcile` function |
 | `app/demo.py` | Offline fictional examples printed as JSON |
 | `app/application/ports.py` | Stored records, command context and repository/unit-of-work protocols |
 | `app/application/errors.py` | Stable application error codes |
 | `app/application/workflows.py` | `WorkflowService`: versions, commands, transactions, idempotency |
 | `app/application/documents.py` | `prepare_document`, `DocumentService`: intake, storage and evidence |
+| `app/application/reconciliation.py` | `ReconciliationService`: snapshots, inputs hash, freshness, reproduction, reports |
 | `app/infrastructure/db/models.py` | SQLAlchemy tables, `NUMERIC` columns and check constraints |
 | `app/infrastructure/db/repository.py` | PostgreSQL workflow repository and hash verification |
 | `app/infrastructure/db/documents.py` | PostgreSQL document repository |
+| `app/infrastructure/db/reconciliations.py` | PostgreSQL storage for rule versions and reconciliation snapshots |
 | `app/infrastructure/db/inserts.py` | Immediate inserts and constraint-race translation |
 | `app/infrastructure/db/unit_of_work.py` | One session per command, shared by both repositories |
 | `app/infrastructure/documents/` | Text decoding and the isolated `python -I` PDF worker |
@@ -37,6 +40,7 @@ Keep the initial application small and add a layer when it owns real behavior.
 | `app/persistence_demo.py` | Fictional PostgreSQL scenario and `show` command |
 | `app/samples.py` | Fictional text/PDF samples and a deterministic minimal PDF writer |
 | `app/documents_cli.py` | Document `write-samples`, `ingest`, `show`, `evidence` and `demo` |
+| `app/reconciliation_cli.py` | Reconciliation `demo` and `show` |
 | `alembic.ini`, `migrations/` | Alembic configuration, environment and revisions |
 | `tests/` | Automated checks; `tests/persistence/` needs `TEST_DATABASE_URL` |
 | `scripts/check_docs.py` | Local Markdown link validation |
@@ -63,6 +67,8 @@ from its own application instance.
 | `docs/instructions/persistence.md` | Database setup, migrations, demo and service rules |
 | `docs/STAGE_04.md` | Document intake and field provenance walkthrough in Russian |
 | `docs/instructions/documents.md` | Intake limits, field schema, parser, storage and commands |
+| `docs/STAGE_05.md` | Reconciliation walkthrough in Russian |
+| `docs/instructions/reconciliation.md` | Rules, codes, snapshots, freshness and commands |
 | `docs/instructions/` | Short operational instructions in English |
 | `docs/CI_CD.md` | CI configuration and limits of remote verification |
 | `docs/VERIFICATION.md` | Recorded command outcomes and limitations |

@@ -57,6 +57,18 @@ _TABLE_TEXT = {
         "Поля с цитатами (этап 04)",
         "Fields with evidence (stage 04)",
     ),
+    "reconciliation_rule_versions": (
+        "Версия правил сверки (этап 05)",
+        "Reconciliation rule version (stage 05)",
+    ),
+    "reconciliation_currency_rules": (
+        "Допуски по валюте (этап 05)",
+        "Tolerances per currency (stage 05)",
+    ),
+    "reconciliation_snapshots": (
+        "Снимок сверки (этап 05)",
+        "Reconciliation snapshot (stage 05)",
+    ),
 }
 
 

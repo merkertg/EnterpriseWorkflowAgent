@@ -108,4 +108,6 @@ Stage 02 codes such as `invalid_transition`.
 - No backups, retention policy, multi-tenant isolation or HTTP commands.
 
 Revision `0002` (Stage 04) adds document tables; see [documents](documents.md).
+Revision `0003` (Stage 05) adds reconciliation rules and snapshots; see
+[reconciliation](reconciliation.md).
 For integration tests see [testing](testing.md).

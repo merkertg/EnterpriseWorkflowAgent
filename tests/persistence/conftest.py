@@ -7,6 +7,7 @@ REQUIRE_TEST_DATABASE=1 so a missing database fails instead of skipping.
 import os
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -16,19 +17,37 @@ from sqlalchemy import Engine, text
 
 from app.application.documents import DocumentService
 from app.application.ports import CommandContext, CommandResult, VersionRef
+from app.application.reconciliation import ReconciliationService
 from app.application.workflows import WorkflowService
 from app.demo import build_demo_documents
 from app.domain.models import Invoice, PurchaseOrder
+from app.domain.money import Currency, Money
+from app.domain.reconciliation import CurrencyRule, ReconciliationRules
 from app.domain.rules import ValidationPolicy
 from app.infrastructure.db.session import (
     build_document_service,
+    build_reconciliation_service,
     build_workflow_service,
     create_database_engine,
     require_test_database_url,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
+# Fictional USD/EUR tolerances shared by reconciliation tests.
+USD_RULES = ReconciliationRules(
+    "test-rules",
+    (
+        CurrencyRule(
+            Currency.USD,
+            Money(Decimal("0.05"), Currency.USD),
+            Money(Decimal("0.10"), Currency.USD),
+        ),
+    ),
+)
 TABLES = (
+    "reconciliation_snapshots",
+    "reconciliation_currency_rules",
+    "reconciliation_rule_versions",
     "extracted_fields",
     "document_extractions",
     "document_pages",
@@ -96,6 +115,12 @@ def service(engine: Engine) -> WorkflowService:
 def document_service(engine: Engine) -> DocumentService:
     """Document intake with the real PDF worker and deterministic parser."""
     return build_document_service(engine)
+
+
+@pytest.fixture
+def reconciliation_service(engine: Engine) -> ReconciliationService:
+    """Reconciliation over the same test database."""
+    return build_reconciliation_service(engine)
 
 
 def context(key: str) -> CommandContext:

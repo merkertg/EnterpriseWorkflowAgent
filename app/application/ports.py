@@ -19,6 +19,7 @@ from app.domain.extraction import (
     ExtractionStatus,
 )
 from app.domain.models import Invoice, PurchaseOrder, validate_text
+from app.domain.reconciliation import ReconciliationResult, ReconciliationRules
 from app.domain.rules import ValidationPolicy, ValidationResult
 from app.domain.workflow import Workflow, WorkflowState
 
@@ -304,6 +305,86 @@ class DocumentRepository(Protocol):
         """Insert an extraction with its fields and problems."""
         ...
 
+    def get_extraction(self, extraction_id: UUID) -> StoredExtraction | None:
+        """Return one stored extraction by its ID."""
+        ...
+
+    def first_extraction_for_invoice(
+        self, invoice_version_id: UUID
+    ) -> StoredExtraction | None:
+        """Return the earliest complete extraction that produced an invoice."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class ReconciliationInputs:
+    """Exactly which versions and hashes a reconciliation was computed from."""
+
+    invoice_version: VersionRef
+    purchase_order_version: VersionRef | None
+    rules_version: VersionRef
+    source_document_id: UUID | None
+    document_content_hash: str | None
+    extraction_id: UUID | None
+    fields_hash: str | None
+    duplicate_workflow_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class StoredReconciliation:
+    """An immutable reconciliation snapshot tied to a workflow version."""
+
+    snapshot_id: UUID
+    workflow_id: str
+    workflow_version: int
+    engine: str
+    inputs_hash: str
+    inputs: ReconciliationInputs
+    result: ReconciliationResult
+    created_at: datetime | None = None
+
+
+class ReconciliationRepository(Protocol):
+    """Store rule versions and reconciliation snapshots in the transaction."""
+
+    def latest_rules_version(self, rules_id: str) -> VersionRef | None:
+        """Return the highest stored version of a rule set."""
+        ...
+
+    def add_rules_version(self, version: Versioned[ReconciliationRules]) -> None:
+        """Insert a rule set with its currency rules."""
+        ...
+
+    def get_rules_version(
+        self, version_id: UUID
+    ) -> Versioned[ReconciliationRules] | None:
+        """Load and hash-verify one rule set version."""
+        ...
+
+    def duplicate_workflow_ids(
+        self, supplier_id: str, invoice_id: str, exclude_workflow_id: str
+    ) -> tuple[str, ...]:
+        """Return other non-rejected workflows for the same supplier invoice."""
+        ...
+
+    def find_snapshot(
+        self, workflow_id: str, inputs_hash: str
+    ) -> StoredReconciliation | None:
+        """Return a snapshot already computed from identical inputs."""
+        ...
+
+    def add_snapshot(self, snapshot: StoredReconciliation) -> None:
+        """Insert a snapshot; an identical concurrent one raises a race error."""
+        ...
+
+    def get_snapshot(self, snapshot_id: UUID) -> StoredReconciliation | None:
+        """Load a snapshot as it was stored."""
+        ...
+
+    def latest_snapshot(self, workflow_id: str) -> StoredReconciliation | None:
+        """Return the most recent snapshot of a workflow."""
+        ...
+
 
 class UnitOfWork(Protocol):
     """One transaction: commit explicitly, otherwise leaving the block rolls back."""
@@ -316,6 +397,11 @@ class UnitOfWork(Protocol):
     @property
     def documents(self) -> DocumentRepository:
         """Return the document repository bound to the same transaction."""
+        ...
+
+    @property
+    def reconciliations(self) -> ReconciliationRepository:
+        """Return the reconciliation repository bound to the same transaction."""
         ...
 
     def __enter__(self) -> Self:

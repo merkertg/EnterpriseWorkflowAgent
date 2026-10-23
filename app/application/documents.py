@@ -98,7 +98,7 @@ def clean_declared_name(name: str | None) -> str | None:
     return printable[:255] or None
 
 
-def _citation(pages: tuple[str, ...], page: int, start: int, end: int) -> Citation:
+def cite(pages: tuple[str, ...], page: int, start: int, end: int) -> Citation:
     """Cut the quote and its line from stored page text."""
     text = pages[page - 1]
     line_start = text.rfind("\n", 0, start) + 1
@@ -276,7 +276,7 @@ class DocumentService:
         if any(item.quote(pages) is None for item in field.evidence):
             raise StoredDataIntegrityError("Evidence points outside the stored text.")
         citations = tuple(
-            _citation(pages, item.page, item.start, item.end) for item in field.evidence
+            cite(pages, item.page, item.start, item.end) for item in field.evidence
         )
         if field.status is FieldStatus.FOUND and any(
             citation.quote != field.value for citation in citations

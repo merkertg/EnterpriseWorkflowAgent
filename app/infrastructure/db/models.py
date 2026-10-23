@@ -11,6 +11,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -32,6 +33,11 @@ from app.application.ports import CommandName
 from app.domain.documents import MediaType
 from app.domain.extraction import ExtractionStatus, FieldStatus
 from app.domain.money import Currency
+from app.domain.reconciliation import (
+    SUPPORTED_DECIMAL_PLACES,
+    SUPPORTED_ROUNDING,
+    ReconciliationStatus,
+)
 from app.domain.workflow import WorkflowState
 
 # Deterministic names let migrations and error handling refer to constraints.
@@ -60,6 +66,7 @@ COMMAND_VALUES = tuple(item.value for item in CommandName)
 MEDIA_TYPE_VALUES = tuple(item.value for item in MediaType)
 EXTRACTION_STATUS_VALUES = tuple(item.value for item in ExtractionStatus)
 FIELD_STATUS_VALUES = tuple(item.value for item in FieldStatus)
+RECONCILIATION_STATUS_VALUES = tuple(item.value for item in ReconciliationStatus)
 
 
 class Base(DeclarativeBase):
@@ -402,6 +409,114 @@ class ExtractedFieldRow(Base):
     evidence: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
 
 
+class ReconciliationRuleVersionRow(Base):
+    """One immutable reconciliation rule set; tolerances are child rows."""
+
+    __tablename__ = "reconciliation_rule_versions"
+    __table_args__ = (
+        UniqueConstraint("rules_id", "version_no"),
+        CheckConstraint("version_no > 0", name="version_no_positive"),
+        CheckConstraint(f"content_hash ~ {HASH_PATTERN}", name="content_hash_hex"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    rules_id: Mapped[str] = mapped_column(String(128))
+    version_no: Mapped[int] = mapped_column(Integer)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    allow_partial_quantities: Mapped[bool] = mapped_column(Boolean)
+    require_source_document: Mapped[bool] = mapped_column(Boolean)
+    created_at: Mapped[datetime] = _created_at()
+
+
+class ReconciliationCurrencyRuleRow(Base):
+    """Tolerances for one currency; rounding is limited to what the engine does."""
+
+    __tablename__ = "reconciliation_currency_rules"
+    __table_args__ = (
+        CheckConstraint(_one_of("currency", CURRENCY_VALUES), name="currency"),
+        CheckConstraint("unit_price_tolerance >= 0", name="unit_tolerance_nonnegative"),
+        CheckConstraint("total_tolerance >= 0", name="total_tolerance_nonnegative"),
+        CheckConstraint(
+            f"decimal_places = {SUPPORTED_DECIMAL_PLACES} "
+            f"AND rounding = '{SUPPORTED_ROUNDING}'",
+            name="supported_rounding",
+        ),
+    )
+
+    rules_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("reconciliation_rule_versions.id"), primary_key=True
+    )
+    currency: Mapped[str] = mapped_column(String(3), primary_key=True)
+    unit_price_tolerance: Mapped[Decimal] = mapped_column(MONEY)
+    total_tolerance: Mapped[Decimal] = mapped_column(MONEY)
+    decimal_places: Mapped[int] = mapped_column(Integer)
+    rounding: Mapped[str] = mapped_column(String(32))
+
+
+class ReconciliationSnapshotRow(Base):
+    """An immutable reconciliation result with every input version and hash."""
+
+    __tablename__ = "reconciliation_snapshots"
+    __table_args__ = (
+        UniqueConstraint("workflow_id", "inputs_hash"),
+        CheckConstraint(f"inputs_hash ~ {HASH_PATTERN}", name="inputs_hash_hex"),
+        CheckConstraint("workflow_version > 0", name="workflow_version_positive"),
+        CheckConstraint(
+            "(purchase_order_version_id IS NULL) "
+            "= (purchase_order_content_hash IS NULL)",
+            name="purchase_order_pair",
+        ),
+        CheckConstraint(
+            "(source_document_id IS NULL) = (document_content_hash IS NULL)",
+            name="document_pair",
+        ),
+        CheckConstraint(
+            "(extraction_id IS NULL) = (fields_hash IS NULL)", name="extraction_pair"
+        ),
+        CheckConstraint(_one_of("status", RECONCILIATION_STATUS_VALUES), name="status"),
+        CheckConstraint(_one_of("currency", CURRENCY_VALUES), name="currency"),
+        CheckConstraint(
+            "jsonb_typeof(discrepancies) = 'array' AND jsonb_typeof(lines) = 'array'",
+            name="json_arrays",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    workflow_id: Mapped[str] = mapped_column(
+        ForeignKey("workflows.workflow_id"), index=True
+    )
+    workflow_version: Mapped[int] = mapped_column(Integer)
+    inputs_hash: Mapped[str] = mapped_column(String(64))
+    engine: Mapped[str] = mapped_column(String(64))
+    invoice_version_id: Mapped[UUID] = mapped_column(ForeignKey("invoice_versions.id"))
+    invoice_content_hash: Mapped[str] = mapped_column(String(64))
+    purchase_order_version_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("purchase_order_versions.id")
+    )
+    purchase_order_content_hash: Mapped[str | None] = mapped_column(String(64))
+    rules_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("reconciliation_rule_versions.id")
+    )
+    rules_content_hash: Mapped[str] = mapped_column(String(64))
+    source_document_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("source_documents.id")
+    )
+    document_content_hash: Mapped[str | None] = mapped_column(String(64))
+    extraction_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("document_extractions.id")
+    )
+    fields_hash: Mapped[str | None] = mapped_column(String(64))
+    duplicate_workflow_ids: Mapped[list[str]] = mapped_column(ARRAY(String(128)))
+    status: Mapped[str] = mapped_column(String(32))
+    currency: Mapped[str] = mapped_column(String(3))
+    calculated_total: Mapped[Decimal] = mapped_column(MONEY)
+    expected_total: Mapped[Decimal | None] = mapped_column(MONEY)
+    order_total: Mapped[Decimal | None] = mapped_column(MONEY)
+    discrepancies: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    lines: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = _created_at()
+
+
 # Rows that must never change after insertion; a database trigger enforces this.
 APPEND_ONLY_TABLES = (
     "invoice_versions",
@@ -416,4 +531,7 @@ APPEND_ONLY_TABLES = (
     "document_pages",
     "document_extractions",
     "extracted_fields",
+    "reconciliation_rule_versions",
+    "reconciliation_currency_rules",
+    "reconciliation_snapshots",
 )

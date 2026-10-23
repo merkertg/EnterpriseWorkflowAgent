@@ -7,6 +7,7 @@ from sqlalchemy.exc import ArgumentError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.application.documents import DocumentService
+from app.application.reconciliation import ReconciliationService
 from app.application.workflows import WorkflowService
 from app.domain.documents import DocumentLimits
 from app.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
@@ -71,4 +72,11 @@ def build_document_service(
         LimitedTextExtractor(),
         LabeledTextInvoiceParser(),
         limits,
+    )
+
+
+def build_reconciliation_service(engine: Engine) -> ReconciliationService:
+    """Compose reconciliation with one new unit of work per call."""
+    return ReconciliationService(
+        partial(SqlAlchemyUnitOfWork, create_session_factory(engine))
     )

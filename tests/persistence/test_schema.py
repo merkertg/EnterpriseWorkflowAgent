@@ -10,10 +10,17 @@ from sqlalchemy import Engine, inspect, text
 from sqlalchemy.exc import DBAPIError
 
 from app.application.documents import DocumentService
+from app.application.reconciliation import ReconciliationService
 from app.application.workflows import WorkflowService
 from app.infrastructure.db.models import APPEND_ONLY_TABLES, Base
 from app.samples import clean_invoice_text
-from tests.persistence.conftest import TABLES, Seed, alembic_config, context
+from tests.persistence.conftest import (
+    TABLES,
+    USD_RULES,
+    Seed,
+    alembic_config,
+    context,
+)
 
 pytestmark = pytest.mark.postgres
 
@@ -37,8 +44,9 @@ def test_money_and_quantity_columns_are_exact_numeric(engine: Engine) -> None:
     query = text(
         "SELECT table_name, column_name, data_type, numeric_precision, numeric_scale "
         "FROM information_schema.columns WHERE table_schema = 'public' "
-        "AND column_name IN "
-        "('declared_total', 'unit_price', 'calculated_total', 'quantity')"
+        "AND column_name IN ('declared_total', 'unit_price', 'calculated_total', "
+        "'quantity', 'expected_total', 'order_total', 'unit_price_tolerance', "
+        "'total_tolerance')"
     )
     with engine.connect() as connection:
         rows = {(row[0], row[1]): tuple(row[2:]) for row in connection.execute(query)}
@@ -49,6 +57,11 @@ def test_money_and_quantity_columns_are_exact_numeric(engine: Engine) -> None:
         ("purchase_order_version_lines", "unit_price"): ("numeric", 14, 2),
         ("purchase_order_version_lines", "quantity"): ("numeric", 12, 6),
         ("validation_snapshots", "calculated_total"): ("numeric", 14, 2),
+        ("reconciliation_currency_rules", "unit_price_tolerance"): ("numeric", 14, 2),
+        ("reconciliation_currency_rules", "total_tolerance"): ("numeric", 14, 2),
+        ("reconciliation_snapshots", "calculated_total"): ("numeric", 14, 2),
+        ("reconciliation_snapshots", "expected_total"): ("numeric", 14, 2),
+        ("reconciliation_snapshots", "order_total"): ("numeric", 14, 2),
     }
 
 
@@ -67,12 +80,17 @@ def test_history_tables_reject_update_and_delete(
     engine: Engine,
     service: WorkflowService,
     document_service: DocumentService,
+    reconciliation_service: ReconciliationService,
     seed: Seed,
     table: str,
 ) -> None:
     """A trigger blocks edits, so stored history cannot be rewritten silently."""
     service.check(seed.workflow_id, expected_version=1, context=context("check"))
     document_service.ingest(clean_invoice_text().encode(), "clean_invoice.txt")
+    rules = reconciliation_service.record_rules(USD_RULES)
+    reconciliation_service.reconcile(
+        seed.workflow_id, rules_version_id=rules.version_id
+    )
     for statement in (f"UPDATE {table} SET {_column(table)}", f"DELETE FROM {table}"):
         with pytest.raises(DBAPIError, match="append-only"), engine.begin() as conn:
             conn.execute(text(statement))
@@ -104,6 +122,8 @@ def _column(table: str) -> str:
         return "text = text"
     if table == "extracted_fields":
         return "position = position"
-    if table == "document_extractions":
+    if table in ("document_extractions", "reconciliation_snapshots"):
         return "status = status"
+    if table == "reconciliation_currency_rules":
+        return "currency = currency"
     return "created_at = created_at"

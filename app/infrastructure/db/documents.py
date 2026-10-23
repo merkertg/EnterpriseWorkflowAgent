@@ -188,6 +188,23 @@ class SqlAlchemyDocumentRepository:
         ).first()
         return None if row is None else self._extraction(row)
 
+    def get_extraction(self, extraction_id: UUID) -> StoredExtraction | None:
+        """Return one stored extraction by its ID."""
+        row = self._session.get(DocumentExtractionRow, extraction_id)
+        return None if row is None else self._extraction(row)
+
+    def first_extraction_for_invoice(
+        self, invoice_version_id: UUID
+    ) -> StoredExtraction | None:
+        """Pick the earliest complete extraction; ties break by ID for stability."""
+        row = self._session.scalars(
+            select(DocumentExtractionRow)
+            .where(DocumentExtractionRow.invoice_version_id == invoice_version_id)
+            .order_by(DocumentExtractionRow.created_at, DocumentExtractionRow.id)
+            .limit(1)
+        ).first()
+        return None if row is None else self._extraction(row)
+
     def add_extraction(self, extraction: StoredExtraction) -> None:
         """Insert the extraction header, then each field in reported order."""
         insert_rows(

@@ -410,8 +410,12 @@ def simple_table(
     rows: Sequence[Sequence[str]],
     widths: Sequence[float],
     styles: Sequence[Any] | None = None,
+    padding: float = 4,
 ) -> Any:
-    """A striped table with a dark header; styles set each column's font."""
+    """A striped table with a dark header; styles set each column's font.
+
+    A smaller vertical padding fits long lists on one page without shrinking text.
+    """
     column_styles = list(styles or [CELL_B] + [CELL] * (len(headers) - 1))
     prepared = [[p(value, HEAD) for value in headers]]
     for row in rows:
@@ -425,8 +429,8 @@ def simple_table(
         ("LINEBELOW", (0, 0), (-1, -1), 0.4, LINE),
         ("LEFTPADDING", (0, 0), (-1, -1), 6),
         ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), padding),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), padding + 1),
     ]
     for index in range(2, len(prepared), 2):
         commands.append(("BACKGROUND", (0, index), (-1, index), SOFT))

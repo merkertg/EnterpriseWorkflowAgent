@@ -2,9 +2,9 @@
 
 [README](../../README.md) · [Detailed Stage 01 guide in Russian](../STAGE_01.md)
 
-Stages 01–04 provide a local FastAPI liveness endpoint, an in-memory domain
-demonstration, PostgreSQL persistence and document intake used through Python
-and command-line tools. The HTTP service does not accept documents or expose
+Stages 01–05 provide a local FastAPI liveness endpoint, an in-memory domain
+demonstration, PostgreSQL persistence, document intake and reconciliation used
+through Python and command-line tools. The HTTP service does not accept documents or expose
 workflow commands yet.
 
 ## Prepare
@@ -73,3 +73,7 @@ For Stage 04 documents, run
 `uv run --locked python -m app.documents_cli write-samples var/samples` (no
 database needed), then `ingest`, `evidence` or `demo`; see
 [documents](documents.md).
+
+For Stage 05 reconciliation, run
+`uv run --locked python -m app.reconciliation_cli demo`; see
+[reconciliation](reconciliation.md).

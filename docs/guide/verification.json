@@ -1,17 +1,18 @@
 {
   "project": "enterprise-workflow-agent",
-  "stage": "04",
+  "stage": "05",
   "implemented_stages": [
     "01",
     "02",
     "03",
-    "04"
+    "04",
+    "05"
   ],
   "status": "implemented_locally_verified",
   "verified_on": "2026-10-23",
   "timezone": "Asia/Tashkent",
   "git": {
-    "base_commit": "cbebe08",
+    "base_commit": "00eb76e",
     "base_commit_pushed_to": "main",
     "scope": "uncommitted_working_tree",
     "committed": false,
@@ -37,16 +38,16 @@
     "postgresql": "18.3 (Homebrew, temporary cluster on 127.0.0.1:55433)"
   },
   "tests": {
-    "total": 300,
-    "postgres": 52,
+    "total": 331,
+    "postgres": 65,
     "with_database": {
-      "passed": 300,
+      "passed": 331,
       "failed": 0,
       "skipped": 0
     },
     "without_database": {
-      "passed": 248,
-      "skipped": 52
+      "passed": 266,
+      "skipped": 65
     }
   },
   "checks": [
@@ -65,26 +66,26 @@
     {
       "command": "uv run --locked ruff format --check .",
       "status": "passed",
-      "files": 111
+      "files": 124
     },
     {
       "command": "uv run --locked mypy app tests scripts migrations",
       "status": "passed",
-      "source_files": 88
+      "source_files": 98
     },
     {
       "command": "uv run --locked pytest",
       "database": "none",
       "status": "passed",
-      "passed": 248,
+      "passed": 266,
       "failed": 0,
-      "skipped": 52
+      "skipped": 65
     },
     {
       "command": "REQUIRE_TEST_DATABASE=1 TEST_DATABASE_URL=... uv run --locked pytest",
       "database": "enterprise_workflow_test",
       "status": "passed",
-      "passed": 300,
+      "passed": 331,
       "failed": 0,
       "skipped": 0
     },
@@ -92,16 +93,16 @@
       "command": "uv run --locked pytest -m postgres",
       "database": "enterprise_workflow_test",
       "status": "passed",
-      "passed": 52,
-      "deselected": 248
+      "passed": 65,
+      "deselected": 266
     },
     {
       "command": "uv run --locked alembic upgrade head",
       "status": "passed",
-      "revision": "0002"
+      "revision": "0003"
     },
     {
-      "command": "uv run --locked alembic downgrade 0001 && uv run --locked alembic upgrade head",
+      "command": "uv run --locked alembic downgrade 0002 && uv run --locked alembic upgrade head",
       "status": "passed"
     },
     {
@@ -112,14 +113,15 @@
     {
       "command": "uv run --locked alembic upgrade head --sql",
       "status": "passed",
-      "create_table_statements": 14
+      "create_table_statements": 17
+    },
+    {
+      "command": "uv run --locked python -m app.reconciliation_cli demo",
+      "status": "passed"
     },
     {
       "command": "uv run --locked python -m app.documents_cli demo",
-      "status": "passed",
-      "runs": 2,
-      "second_run_reused_documents": 4,
-      "workflow_state_after_check": "awaiting_approval"
+      "status": "passed"
     },
     {
       "command": "uv run --locked python -m app.persistence_demo",
@@ -130,18 +132,11 @@
       "status": "passed"
     },
     {
-      "command": "uv run --locked python scripts/check_docs.py",
-      "status": "passed",
-      "links": 157,
-      "files": 23,
-      "scope": "local_inline_markdown_target_files_only"
-    },
-    {
       "command": "uv run --locked --group guide python scripts/build_guide.py",
       "status": "passed",
       "pages": {
-        "ru": 22,
-        "en": 22
+        "ru": 25,
+        "en": 25
       }
     },
     {
@@ -150,18 +145,17 @@
       "passed": 4
     },
     {
+      "command": "uv run --locked python scripts/check_docs.py",
+      "status": "passed",
+      "links": 179,
+      "files": 26,
+      "scope": "local_inline_markdown_target_files_only"
+    },
+    {
       "command": "git diff --check plus trailing-whitespace scan",
       "status": "passed"
     }
   ],
-  "repeated_runs": {
-    "files": [
-      "tests/persistence/test_documents.py",
-      "tests/persistence/test_concurrency.py"
-    ],
-    "runs": 15,
-    "failures": 0
-  },
   "http_smoke": {
     "status": "passed",
     "checked_stage": "01",
@@ -176,7 +170,12 @@
   "remote_ci": {
     "status": "not_verified",
     "run_url": null,
-    "reason": "Built-in browser not signed in to GitHub; gh CLI not installed."
+    "reason": "Built-in browser not signed in to GitHub; gh CLI not installed.",
+    "pushed_commits": [
+      "cbebe08",
+      "8b697f7",
+      "00eb76e"
+    ]
   },
   "real_llm": {
     "status": "not_implemented"
@@ -216,11 +215,12 @@
     "status": "implemented_locally_verified",
     "migrations": [
       "0001",
-      "0002"
+      "0002",
+      "0003"
     ],
-    "tables": 13,
-    "append_only_tables": 12,
-    "stale_version_detection": "planned_stage_05_06"
+    "tables": 16,
+    "append_only_tables": 15,
+    "stale_version_detection": "implemented_stage_05"
   },
   "human_approvals": {
     "status": "service_command_without_authentication",
@@ -234,16 +234,45 @@
       "docs/guide/enterprise-workflow-agent-guide-en.pdf"
     ],
     "pages": {
-      "ru": 22,
-      "en": 22
+      "ru": 25,
+      "en": 25
     },
-    "sections": 21,
+    "sections": 24,
     "generator": "scripts/build_guide.py",
     "reportlab": "4.4.9 (uv dependency group guide)",
     "fonts": "PT Sans / PT Mono (macOS)",
     "freshness_check": "source-sha256 in PDF keywords, tests/test_guide_pdfs.py",
-    "visual_check": "all 44 pages at 62-70 dpi after the final build",
+    "visual_check": "all 50 pages after the final build",
     "linux_build": "not_verified"
   },
-  "next_stage": "05"
+  "next_stage": "06",
+  "repeated_runs": {
+    "files": [
+      "tests/persistence/test_reconciliation.py",
+      "tests/persistence/test_concurrency.py"
+    ],
+    "runs": 8,
+    "failures": 0
+  },
+  "reconciliation": {
+    "status": "implemented_locally_verified",
+    "engine": "reconciliation.v1",
+    "discrepancy_codes": 13,
+    "tolerances": "absolute, inclusive, per currency (unit price and total)",
+    "rounding": "ROUND_HALF_UP, 2 decimals, stated in rules",
+    "snapshot_inputs": [
+      "invoice version+hash",
+      "purchase order version+hash",
+      "rules version+hash",
+      "source document+hash",
+      "extraction+fields hash",
+      "duplicate workflow ids"
+    ],
+    "stale_reasons": 5,
+    "reproduction": "recomputed from the snapshot's own versions",
+    "duplicates": "same supplier_id and invoice_id in a non-rejected workflow",
+    "approval_gate": "planned_stage_06",
+    "new_tests_without_database": 18,
+    "new_tests_with_database": 13
+  }
 }

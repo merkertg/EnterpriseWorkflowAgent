@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from app.application.ports import CommandName
+from app.application.reconciliation import StaleReason
 from app.domain.documents import DocumentLimits, RejectionCode
 from app.domain.extraction import (
     HEADER_FIELDS,
@@ -19,6 +20,7 @@ from app.domain.extraction import (
     FieldStatus,
     ProblemCode,
 )
+from app.domain.reconciliation import RECONCILIATION_ENGINE, DiscrepancyCode
 from app.domain.rules import IssueCode
 from app.domain.workflow import WorkflowState
 from app.infrastructure.db.models import APPEND_ONLY_TABLES, Base
@@ -60,6 +62,9 @@ class Facts:
     append_only: tuple[str, ...]
     migrations: tuple[str, ...]
     extractor: str
+    discrepancy_codes: tuple[str, ...]
+    stale_reasons: tuple[str, ...]
+    engine: str
 
 
 def read_source(relative: str) -> str:
@@ -116,6 +121,9 @@ def load_facts() -> Facts:
         append_only=APPEND_ONLY_TABLES,
         migrations=migrations,
         extractor=EXTRACTOR_NAME,
+        discrepancy_codes=tuple(item.value for item in DiscrepancyCode),
+        stale_reasons=tuple(item.value for item in StaleReason),
+        engine=RECONCILIATION_ENGINE,
     )
 
 

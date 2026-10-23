@@ -9,8 +9,12 @@ import json
 from collections.abc import Mapping, Sequence
 
 from app.domain.errors import DomainValidationError
+from app.domain.extraction import ExtractionResult
 from app.domain.models import Invoice, LineItem, PurchaseOrder
+from app.domain.reconciliation import ReconciliationRules
 from app.domain.rules import ValidationPolicy
+
+type Hashable = Invoice | PurchaseOrder | ValidationPolicy | ReconciliationRules
 
 type CanonicalValue = (
     str | int | bool | None | Sequence[CanonicalValue] | Mapping[str, CanonicalValue]
@@ -20,6 +24,8 @@ type CanonicalValue = (
 _INVOICE_SCHEMA = "invoice.v1"
 _PURCHASE_ORDER_SCHEMA = "purchase_order.v1"
 _POLICY_SCHEMA = "validation_policy.v1"
+_RULES_SCHEMA = "reconciliation_rules.v1"
+_EXTRACTION_SCHEMA = "extraction.v1"
 
 
 def _line_content(line: LineItem) -> dict[str, CanonicalValue]:
@@ -32,9 +38,7 @@ def _line_content(line: LineItem) -> dict[str, CanonicalValue]:
     }
 
 
-def canonical_content(
-    value: Invoice | PurchaseOrder | ValidationPolicy,
-) -> dict[str, CanonicalValue]:
+def canonical_content(value: Hashable) -> dict[str, CanonicalValue]:
     """Return the ordered business fields whose exact values define a version."""
     if type(value) is Invoice:
         return {
@@ -60,8 +64,25 @@ def canonical_content(
             "policy_id": value.policy_id,
             "allowed_currencies": [item.value for item in value.allowed_currencies],
         }
+    if type(value) is ReconciliationRules:
+        return {
+            "schema": _RULES_SCHEMA,
+            "rules_id": value.rules_id,
+            "allow_partial_quantities": value.allow_partial_quantities,
+            "require_source_document": value.require_source_document,
+            "currency_rules": [
+                {
+                    "currency": rule.currency.value,
+                    "unit_price_tolerance": str(rule.unit_price_tolerance.amount),
+                    "total_tolerance": str(rule.total_tolerance.amount),
+                    "decimal_places": rule.decimal_places,
+                    "rounding": rule.rounding,
+                }
+                for rule in value.currency_rules
+            ],
+        }
     raise DomainValidationError(
-        "invalid_type", "value", "Use an Invoice, PurchaseOrder or ValidationPolicy"
+        "invalid_type", "value", "Use an Invoice, PurchaseOrder or a policy or rules"
     )
 
 
@@ -77,6 +98,28 @@ def sha256_hex(data: Mapping[str, CanonicalValue]) -> str:
     return hashlib.sha256(canonical_json(data)).hexdigest()
 
 
-def content_hash(value: Invoice | PurchaseOrder | ValidationPolicy) -> str:
+def content_hash(value: Hashable) -> str:
     """Fingerprint an input version; any business field change gives a new hash."""
     return sha256_hex(canonical_content(value))
+
+
+def extraction_hash(result: ExtractionResult) -> str:
+    """Fingerprint the exact extracted fields and evidence a result relied on."""
+    if type(result) is not ExtractionResult:
+        raise DomainValidationError("invalid_type", "result", "Use ExtractionResult.")
+    return sha256_hex(
+        {
+            "schema": _EXTRACTION_SCHEMA,
+            "extractor": result.extractor,
+            "fields": [
+                {
+                    "name": item.name,
+                    "status": item.status.value,
+                    "value": item.value,
+                    "message": item.message,
+                    "evidence": [[e.page, e.start, e.end] for e in item.evidence],
+                }
+                for item in result.fields
+            ],
+        }
+    )
