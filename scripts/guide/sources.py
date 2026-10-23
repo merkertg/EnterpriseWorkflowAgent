@@ -11,7 +11,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from app.application.ports import CommandName
+from app.api.errors import ERROR_STATUS
+from app.api.routes.business import router as business_router
+from app.application.access import ROLE_PERMISSIONS, Permission
+from app.application.ports import CommandName, OutboxEventType
 from app.application.reconciliation import StaleReason
 from app.domain.documents import DocumentLimits, RejectionCode
 from app.domain.extraction import (
@@ -65,6 +68,11 @@ class Facts:
     discrepancy_codes: tuple[str, ...]
     stale_reasons: tuple[str, ...]
     engine: str
+    permissions: tuple[str, ...]
+    roles: dict[str, tuple[str, ...]]
+    outbox_types: tuple[str, ...]
+    routes: tuple[tuple[str, str], ...]
+    error_statuses: tuple[tuple[str, int], ...]
 
 
 def read_source(relative: str) -> str:
@@ -124,6 +132,18 @@ def load_facts() -> Facts:
         discrepancy_codes=tuple(item.value for item in DiscrepancyCode),
         stale_reasons=tuple(item.value for item in StaleReason),
         engine=RECONCILIATION_ENGINE,
+        permissions=tuple(item.value for item in Permission),
+        roles={
+            role.value: tuple(item.value for item in Permission if item in allowed)
+            for role, allowed in ROLE_PERMISSIONS.items()
+        },
+        outbox_types=tuple(item.value for item in OutboxEventType),
+        routes=tuple(
+            (method, str(getattr(route, "path", "")))
+            for route in business_router.routes
+            for method in sorted(getattr(route, "methods", ()))
+        ),
+        error_statuses=tuple((kind.code, status) for kind, status in ERROR_STATUS),
     )
 
 

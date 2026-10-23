@@ -1,0 +1,2 @@
+# Generated PDF guides are binary; never diff or whitespace-check them as text.
+*.pdf binary

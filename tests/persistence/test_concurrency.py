@@ -9,10 +9,10 @@ from functools import partial
 import pytest
 from sqlalchemy import Engine
 
+from app.application.access import Principal
 from app.application.errors import VersionConflictError
 from app.application.ports import CommandResult, IdempotencyRecord
 from app.application.workflows import WorkflowService
-from app.domain.workflow import HumanDecision
 from app.infrastructure.db.repository import SqlAlchemyWorkflowRepository
 from app.infrastructure.db.session import create_session_factory
 from app.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
@@ -57,10 +57,9 @@ def test_concurrent_duplicates_execute_once(
 
 
 def test_concurrent_different_commands_have_one_winner(
-    service: WorkflowService, seed: Seed
+    service: WorkflowService, approver: Principal, seed: Seed
 ) -> None:
     """Two intents based on version 1: one commits, the other gets a conflict."""
-    decision = HumanDecision("REVIEWER-TEST-1", "Fictional concurrent rejection")
     results = _together(
         partial(
             service.check, seed.workflow_id, expected_version=1, context=context("a")
@@ -69,7 +68,8 @@ def test_concurrent_different_commands_have_one_winner(
             service.reject,
             seed.workflow_id,
             expected_version=1,
-            decision=decision,
+            reason="Fictional concurrent rejection",
+            actor=approver,
             context=context("b"),
         ),
     )

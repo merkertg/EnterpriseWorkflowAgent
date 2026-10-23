@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from app.application.users import UserService
 from app.application.workflows import WorkflowService
 from app.persistence_demo import run_persistence_demo
 
@@ -16,9 +17,11 @@ pytestmark = pytest.mark.postgres
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_demo_story_has_expected_outcomes(service: WorkflowService) -> None:
+def test_demo_story_has_expected_outcomes(
+    service: WorkflowService, user_service: UserService
+) -> None:
     """Replay, conflict, new versions and a rejected re-check, all fictional."""
-    output = run_persistence_demo(service, "pytest-run")
+    output = run_persistence_demo(service, user_service, "pytest-run")
     steps = output["steps"]
     assert isinstance(steps, list)
     assert [(s["command"], s.get("state"), s.get("version")) for s in steps] == [

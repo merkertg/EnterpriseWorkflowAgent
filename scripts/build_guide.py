@@ -58,6 +58,7 @@ STAGE_COLOURS = {
     "03": "#FDBA74",
     "04": "#C4B5FD",
     "05": "#86EFAC",
+    "06": "#F9A8D4",
 }
 
 
@@ -103,10 +104,10 @@ def cover_page(c: Canvas, doc: Any) -> None:
         tr(
             "Наглядное руководство: uv и FastAPI, точные деньги и правила, "
             "состояния процесса, PostgreSQL и миграции, транзакции, аудит и повторы, "
-            "приём документов с цитатами источника и построчная сверка с заказом.",
+            "документы с цитатами, сверка с заказом и решение сотрудника с ролями.",
             "A visual guide: uv and FastAPI, exact money and rules, workflow states, "
-            "PostgreSQL and migrations, transactions, audit and retries, document "
-            "intake with source citations and line-by-line order reconciliation.",
+            "PostgreSQL and migrations, transactions, audit and retries, documents "
+            "with citations, order reconciliation and role-checked employee decisions.",
         ),
         "PT",
         13.5,
@@ -283,16 +284,17 @@ def build_guide(
             bottomMargin=17 * mm,
             title="Enterprise Workflow Agent - "
             + tr(
-                f"этапы 01–{STAGES_DONE:02d}: домен, хранение, документы и сверка",
+                f"этапы 01–{STAGES_DONE:02d}: домен, хранение, документы, сверка "
+                "и решения",
                 f"stages 01–{STAGES_DONE:02d}: domain, storage, documents, "
-                "reconciliation",
+                "reconciliation, decisions",
             ),
             author="Enterprise Workflow Agent",
             subject=tr(
                 "uv, FastAPI, Decimal, PostgreSQL, Alembic, аудит, идемпотентность, "
-                "PDF, цитаты полей и сверка",
+                "PDF, цитаты полей, сверка, роли и outbox",
                 "uv, FastAPI, Decimal, PostgreSQL, Alembic, audit, idempotency, "
-                "PDF, field evidence and reconciliation",
+                "PDF, field evidence, reconciliation, roles and outbox",
             ),
             keywords=PREFIX + fingerprint,
             lang=lang,

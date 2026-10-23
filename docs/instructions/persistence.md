@@ -90,7 +90,7 @@ service.check(
 | Transaction | Idempotency record, snapshot, workflow update and audit event commit together |
 | Optimistic lock | `expected_version` must equal the stored version; also enforced by `UPDATE ... WHERE version = ...` |
 | Idempotency | Same key and request → stored result with `replayed=True`; same key, other request → `IdempotencyKeyReusedError`; failed commands store nothing |
-| Audit | IDs, command, states, versions, issue codes, caller-declared `actor_id` and `source`; no document text |
+| Audit | IDs, command, states, versions, issue codes, `actor_id`, `source`, and since Stage 06 the reconciliation snapshot and outbox event of a decision; no document text |
 | History tables | Versions, snapshots, audit and idempotency rows reject `UPDATE`/`DELETE` via trigger |
 
 Error codes: `not_found`, `workflow_exists`, `version_conflict`,
@@ -99,15 +99,22 @@ Stage 02 codes such as `invalid_transition`.
 
 ## Limits
 
-- `actor_id` and `source` are caller-declared. There is no authentication.
-- A newer PO or policy version does not mark a pinned workflow stale and does
-  not block approval yet; that is Stage 05 and Stage 06 work.
+- Without an `actor` (internal tools such as this demo), `actor_id` is empty
+  and nothing is authorized. Since Stage 06 `approve` and `reject` always need
+  an authenticated employee, and every workflow has a business unit; see
+  [decisions](decisions.md).
+- A newer policy version does not mark a pinned workflow stale; newer order and
+  rule versions make reconciliation snapshots stale (Stage 05) and block
+  approval (Stage 06).
 - Policy hashes cover policy data, not Python rule code. Changing rule logic
   needs a new policy ID; stored results produced by older logic fail to load.
 - Triggers stop accidental edits. A database owner can still disable them.
-- No backups, retention policy, multi-tenant isolation or HTTP commands.
+- No backups, retention policy or multi-tenant isolation. HTTP commands exist
+  since Stage 06; see [API usage](usage.md).
 
 Revision `0002` (Stage 04) adds document tables; see [documents](documents.md).
 Revision `0003` (Stage 05) adds reconciliation rules and snapshots; see
-[reconciliation](reconciliation.md).
+[reconciliation](reconciliation.md). Revision `0004` (Stage 06) adds users,
+API token hashes, the outbox and business units; existing workflows get the
+unit `unassigned`. See [decisions](decisions.md).
 For integration tests see [testing](testing.md).

@@ -440,11 +440,11 @@ def add_stage04(story: list[Any], facts: Facts) -> None:
         callout(
             tr(
                 "Коды выхода: 0 — успех, 1 — отказ или ошибка, 2 — нет DATABASE_URL. "
-                "ingest сообщает об отказе ещё до подключения к базе. HTTP-загрузка "
-                "появится вместе с правами на этапе 06.",
+                "ingest сообщает об отказе ещё до подключения к базе. С этапа 06 "
+                "документ можно загрузить и через POST /documents с правом submit.",
                 "Exit codes: 0 success, 1 refusal or error, 2 missing DATABASE_URL. "
-                "ingest reports a refusal before connecting. HTTP upload arrives with "
-                "authorization in Stage 06.",
+                "ingest reports a refusal before connecting. Since Stage 06 a "
+                "document can also be uploaded with POST /documents (submit).",
             ),
             GREEN,
             GREEN_L,

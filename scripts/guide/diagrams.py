@@ -14,6 +14,8 @@ from guide.layout import (
     MUTED,
     ORANGE,
     ORANGE_L,
+    PINK,
+    PINK_L,
     RED,
     RED_L,
     SLATE_L,
@@ -33,7 +35,7 @@ from guide.layout import (
     rbox,
 )
 
-STAGES_DONE = 5
+STAGES_DONE = 6
 
 
 def roadmap() -> Diagram:
@@ -107,7 +109,7 @@ def layers() -> Diagram:
             third,
             box_h,
             "CLI / HTTP",
-            tr("demo, documents_cli, /health", "demo, documents_cli, /health"),
+            tr("CLI, HTTP API с токеном", "CLIs, HTTP API with token"),
             VIOLET_L,
             VIOLET,
         )
@@ -142,8 +144,8 @@ def layers() -> Diagram:
             box_h,
             "application",
             tr(
-                "WorkflowService, DocumentService, порты",
-                "WorkflowService, DocumentService, ports",
+                "сервисы, права доступа, порты",
+                "services, access rules, ports",
             ),
             BLUE_L,
             BLUE,
@@ -586,3 +588,196 @@ def snapshot_lifecycle() -> Diagram:
         )
 
     return Diagram(118, draw)
+
+
+def token_flow() -> Diagram:
+    """A token is shown once, stored as a hash and resolved on every request."""
+
+    def draw(c: Canvas, w: float, h: float) -> None:
+        """Draw the four steps and the revocation branch beneath them."""
+        bw, bh, gap = (w - 3 * 20) / 4, 62, 20
+        y = h - bh - 4
+        boxes = [
+            (
+                "users_cli token",
+                tr("ewa_… показан один раз", "ewa_… shown once"),
+                VIOLET_L,
+                VIOLET,
+            ),
+            (
+                "api_tokens",
+                tr("хранится только SHA-256", "only SHA-256 is stored"),
+                SLATE_L,
+                MUTED,
+            ),
+            (
+                "Bearer",
+                tr("каждый запрос: хеш → строка", "each request: hash → row"),
+                BLUE_L,
+                BLUE,
+            ),
+            (
+                "Principal",
+                tr("текущие роли и подразделения", "current roles and units"),
+                GREEN_L,
+                GREEN,
+            ),
+        ]
+        for index, (title, sub, fill, edge) in enumerate(boxes):
+            x = index * (bw + gap)
+            node(c, x, y, bw, bh, title, sub, fill, edge, 10, 7.8)
+            if index:
+                arrow(c, x - gap + 1, y + bh / 2, x - 1, y + bh / 2)
+        branch_y = y - 52
+        node(
+            c,
+            bw + gap,
+            branch_y,
+            2 * bw + gap,
+            36,
+            tr("revoke · deactivate", "revoke · deactivate"),
+            tr(
+                "следующий запрос: 401 unauthenticated",
+                "next request: 401 unauthenticated",
+            ),
+            RED_L,
+            RED,
+            9.5,
+            7.8,
+        )
+        arrow(c, 1.5 * bw + gap, branch_y + 36, 1.5 * bw + gap, y - 1, RED)
+        c.setFillColor(MUTED)
+        c.setFont("PT-Italic", 8.4)
+        c.drawString(
+            0,
+            4,
+            tr(
+                "Неверный, отозванный токен и отключённый сотрудник дают одинаковый ответ.",
+                "A wrong or revoked token and a deactivated user get the same answer.",
+            ),
+        )
+
+    return Diagram(150, draw)
+
+
+def approval_checks() -> Diagram:
+    """Ten approval steps inside one transaction, locks before freshness."""
+    steps = [
+        (tr("Ключ идемпотентности", "Idempotency key"), BLUE),
+        (tr("Версия процесса", "Workflow version"), BLUE),
+        (
+            tr(
+                "Сотрудник: активен, decide, подразделение",
+                "User: active, decide, unit",
+            ),
+            PINK,
+        ),
+        (tr("Не тот, кто запустил", "Not the starter"), PINK),
+        (tr("Снимок этого процесса", "Snapshot of this workflow"), PINK),
+        (tr("Блокировки: заказ, правила, счёт", "Locks: order, rules, invoice"), AMBER),
+        (tr("Входы снимка = текущие", "Snapshot inputs = current"), AMBER),
+        (tr("Статус matched", "Status matched"), AMBER),
+        (tr("Переход в домене", "Domain transition"), TEAL),
+        (
+            tr("Процесс, outbox, аудит → COMMIT", "Workflow, outbox, audit → COMMIT"),
+            GREEN,
+        ),
+    ]
+
+    def draw(c: Canvas, w: float, h: float) -> None:
+        """Draw two columns of numbered steps inside a transaction frame."""
+        rbox(c, 0, 0, w, h, WHITE, PINK, r=10, lw=1.2, dash=(4, 3))
+        c.setFillColor(PINK)
+        c.setFont("PT-Bold", 9)
+        c.drawString(
+            12,
+            h - 16,
+            tr(
+                "approve: одна транзакция PostgreSQL",
+                "approve: one PostgreSQL transaction",
+            ),
+        )
+        column_w = (w - 36) / 2
+        for index, (text, colour) in enumerate(steps):
+            column, row = divmod(index, 5)
+            x = 12 + column * (column_w + 12)
+            y = h - 44 - row * 27
+            circle_num(c, x + 10, y + 8, 10, str(index + 1), colour)
+            c.setFillColor(INK)
+            draw_text(c, x + 26, y + 4, text, "PT", 9.3)
+        c.setFillColor(MUTED)
+        c.setFont("PT-Italic", 8.4)
+        c.drawString(
+            12,
+            8,
+            tr(
+                "Любой отказ — ROLLBACK: ни решения, ни события, ни ключа не остаётся.",
+                "Any refusal rolls back: no decision, event or key remains.",
+            ),
+        )
+
+    return Diagram(5 * 27 + 54, draw)
+
+
+def outbox_commit() -> Diagram:
+    """Decision, outbox event and audit commit together; delivery comes later."""
+
+    def draw(c: Canvas, w: float, h: float) -> None:
+        """Draw the transaction on the left and the planned delivery on the right."""
+        frame_w = w * 0.58
+        rbox(c, 0, 18, frame_w, h - 22, WHITE, GREEN, r=10, lw=1.2, dash=(4, 3))
+        c.setFillColor(GREEN)
+        c.setFont("PT-Bold", 9)
+        c.drawString(12, h - 18, tr("Одна транзакция", "One transaction"))
+        rows = [
+            (
+                "workflows",
+                tr("approved, версия 3", "approved, version 3"),
+                TEAL_L,
+                TEAL,
+            ),
+            ("outbox_events", "invoice.approved", PINK_L, PINK),
+            (
+                "audit_events",
+                tr("→ снимок сверки, → событие", "→ snapshot, → event"),
+                BLUE_L,
+                BLUE,
+            ),
+        ]
+        bw, bh = frame_w - 24, 30
+        for index, (title, sub, fill, edge) in enumerate(rows):
+            y = h - 60 - index * (bh + 8)
+            node(c, 12, y, bw, bh, title, sub, fill, edge, 9.2, 7.6)
+        right_x = frame_w + 30
+        right_w = w - right_x
+        mid = 18 + (h - 22) / 2
+        arrow(c, frame_w + 2, mid, right_x - 2, mid, MUTED, 1.2, 5, (3, 2))
+        node(
+            c,
+            right_x,
+            mid - 34,
+            right_w,
+            68,
+            tr("Обработчик outbox", "Outbox worker"),
+            tr(
+                "этап 09: повторы,\nподписанный sandbox webhook",
+                "Stage 09: retries,\nsigned sandbox webhook",
+            ),
+            SLATE_L,
+            MUTED,
+            9.5,
+            7.6,
+            dash=(3, 2),
+        )
+        c.setFillColor(MUTED)
+        c.setFont("PT-Italic", 8.4)
+        c.drawString(
+            0,
+            4,
+            tr(
+                "Нет решения без события и события без решения; доставки пока нет.",
+                "No decision without an event and no event without a decision; no delivery yet.",
+            ),
+        )
+
+    return Diagram(160, draw)

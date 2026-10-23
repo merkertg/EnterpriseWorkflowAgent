@@ -1,9 +1,18 @@
 # API usage
 
-[README](../../README.md) · [Quickstart](quickstart.md)
+[README](../../README.md) · [Quickstart](quickstart.md) ·
+[Decisions and roles](decisions.md)
 
-Start Uvicorn on `127.0.0.1:8003` before these examples. No credentials are
-required for the current liveness endpoint.
+Start the server on `127.0.0.1:8003`:
+
+```bash
+uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8003
+```
+
+`/health`, `/docs`, `/redoc` and `/openapi.json` need no credentials. Every
+other endpoint (Stage 06) needs `DATABASE_URL`, an upgraded schema and a
+bearer token from `python -m app.users_cli token USER_ID`; without
+`DATABASE_URL` they answer `503 database_not_configured`.
 
 ## Health
 
@@ -11,41 +20,86 @@ required for the current liveness endpoint.
 curl -i http://127.0.0.1:8003/health
 ```
 
-Default body:
-
 ```json
 {"status": "ok", "service": "enterprise-workflow-agent"}
 ```
 
-| Field | Contract |
+`service` is the instance's `APP_NAME`. HTTP `200` confirms only that the
+application handled the request; it does not check the database.
+`POST /health` returns `405`; an unknown route returns `404`.
+
+## Authentication and commands
+
+```bash
+TOKEN=ewa_...   # printed once by users_cli token
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8003/me
+```
+
+A missing, malformed, unknown or revoked token, or a deactivated user, gets
+the same `401 unauthenticated` with `WWW-Authenticate: Bearer`.
+
+Commands that change a workflow (`POST /workflows`, `check`, `revise`,
+`approve`, `reject`) need an `Idempotency-Key` header of 1–60 characters
+from letters, digits and `. _ : -`. The server prefixes it with the caller's
+user ID. Repeating the same request with the same key returns the stored
+result with `"replayed": true`; the same key with other arguments is
+`409 idempotency_key_reused`.
+
+## Endpoints
+
+| Method and path | Permission | Purpose |
+| --- | --- | --- |
+| `GET /me` | any user | User ID, roles, units, permissions |
+| `POST /documents?name=NAME` | `submit` | Upload raw bytes (`application/octet-stream`); returns document, extraction status, fields, problems and invoice version |
+| `GET /reference/{kind}/{business_id}` | `view` | Latest version of `purchase-orders`, `policies` or `reconciliation-rules` |
+| `POST /workflows` | `submit` | Start: `workflow_id`, `business_unit`, `invoice_version_id`, `purchase_order_version_id` (or `null`), `policy_version_id` |
+| `GET /workflows/{id}` | `view` | State, version, unit, creator, pinned versions, issue codes, decision |
+| `POST /workflows/{id}/check` | `submit` | `{"expected_version": N}` |
+| `POST /workflows/{id}/revise` | `submit` | Expected version and new version IDs |
+| `POST /workflows/{id}/reconciliations` | `reconcile` | `{"rules_version_id": ...}`; returns the report |
+| `GET /workflows/{id}/reconciliations/latest` | `view` | Newest report with `current` and `stale_reasons` |
+| `GET /reconciliations/{snapshot_id}` | `view` | One report |
+| `POST /workflows/{id}/approve` | `decide` | `expected_version`, `reconciliation_snapshot_id`, `reason` |
+| `POST /workflows/{id}/reject` | `decide` | `expected_version`, `reason` |
+| `GET /workflows/{id}/audit` | `view` | Audit events with actor, snapshot and outbox references |
+| `GET /workflows/{id}/outbox` | `view` | Stored decision events |
+
+Request bodies reject unknown fields and use strict types (`"2"` is not a
+version). Uploads are read only up to 1 MiB; a larger body is `413 too_large`.
+
+## Example: approve a reconciled workflow
+
+```bash
+curl -X POST http://127.0.0.1:8003/workflows/WF-1/approve \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Idempotency-Key: approve-wf-1" \
+  -H "Content-Type: application/json" \
+  -d '{"expected_version": 2, "reconciliation_snapshot_id": "SNAPSHOT_ID", "reason": "Fictional invoice matches the order"}'
+```
+
+## Errors
+
+Every error body is `{"error": {"code": "...", "message": "..."}}`, with
+`field`, `reasons` or `problems` where relevant. Validation problems list
+locations and messages, never the submitted values.
+
+| Status | Codes |
 | --- | --- |
-| `status` | The literal string `ok` |
-| `service` | The application instance's configured `APP_NAME` |
-
-HTTP `200` confirms that the application handled this request. It does not
-check a database, document extraction, corporate rules, an LLM, or a complete
-approval workflow. Current basic rules run separately through the Python domain.
-
-`POST /health` returns `405 Method Not Allowed`. An unknown route returns
-`404 Not Found`.
+| 401 | `unauthenticated` |
+| 403 | `missing_permission`, `self_approval_forbidden` |
+| 404 | `not_found`, also for another business unit's workflow |
+| 409 | `version_conflict`, `invalid_transition`, `stale_validation`, `stale_reconciliation`, `reconciliation_not_matched`, `idempotency_key_reused`, `workflow_exists`, `concurrent_write` |
+| 413 | `too_large` |
+| 422 | `invalid_request`, document rejection codes, `reconciliation_not_for_workflow`, other domain validation codes |
+| 503 | `database_not_configured`, `database_unavailable` |
 
 ## API documentation
 
-- [Swagger UI](http://127.0.0.1:8003/docs): execute `GET /health` interactively.
-- [ReDoc](http://127.0.0.1:8003/redoc): read the generated API description.
-- [OpenAPI JSON](http://127.0.0.1:8003/openapi.json): inspect the API contract.
+[Swagger UI](http://127.0.0.1:8003/docs) lets you authorize with the token
+and try each operation; [ReDoc](http://127.0.0.1:8003/redoc) and
+[OpenAPI JSON](http://127.0.0.1:8003/openapi.json) describe the contract,
+including the bearer scheme and the `Idempotency-Key` header.
 
-The `HealthResponse` schema defines the response. There are no invoice,
-procurement, approval, upload or agent endpoints in Stage 01.
-
-Stage 02 adds an in-memory Python domain and CLI, rather than additional HTTP
-endpoints. See [domain usage](domain.md) for its demonstration and limits.
-Stage 03 adds PostgreSQL persistence used through Python and
-`python -m app.persistence_demo`; it adds no HTTP endpoints, and `/health` does
-not check the database. See [persistence](persistence.md).
-Stage 04 document intake is available through `python -m app.documents_cli`;
-the HTTP upload endpoint is planned with authorization in Stage 06. See
-[documents](documents.md). Stage 05 reconciliation runs through
-`python -m app.reconciliation_cli`; see [reconciliation](reconciliation.md).
-
-For settings and server commands, see [Quickstart](quickstart.md).
+Command-line tools remain available: [domain](domain.md),
+[persistence](persistence.md), [documents](documents.md),
+[reconciliation](reconciliation.md) and [decisions](decisions.md).

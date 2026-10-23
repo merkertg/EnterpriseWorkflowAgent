@@ -29,7 +29,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from app.application.ports import CommandName
+from app.application.access import Role
+from app.application.ports import CommandName, OutboxEventType
 from app.domain.documents import MediaType
 from app.domain.extraction import ExtractionStatus, FieldStatus
 from app.domain.money import Currency
@@ -67,6 +68,8 @@ MEDIA_TYPE_VALUES = tuple(item.value for item in MediaType)
 EXTRACTION_STATUS_VALUES = tuple(item.value for item in ExtractionStatus)
 FIELD_STATUS_VALUES = tuple(item.value for item in FieldStatus)
 RECONCILIATION_STATUS_VALUES = tuple(item.value for item in ReconciliationStatus)
+ROLE_VALUES = tuple(item.value for item in Role)
+OUTBOX_EVENT_VALUES = tuple(item.value for item in OutboxEventType)
 
 
 class Base(DeclarativeBase):
@@ -222,6 +225,12 @@ class WorkflowRow(Base):
     )
     decision_actor_id: Mapped[str | None] = mapped_column(String(128))
     decision_reason: Mapped[str | None] = mapped_column(String(2000))
+    # Stage 06: owning business unit, who started it and the approved snapshot.
+    business_unit: Mapped[str] = mapped_column(String(64), index=True)
+    created_by: Mapped[str | None] = mapped_column(String(64))
+    decision_reconciliation_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("reconciliation_snapshots.id", use_alter=True)
+    )
     created_at: Mapped[datetime] = _created_at()
     updated_at: Mapped[datetime] = _created_at()
 
@@ -297,6 +306,10 @@ class AuditEventRow(Base):
     actor_id: Mapped[str | None] = mapped_column(String(128))
     source: Mapped[str] = mapped_column(String(64))
     idempotency_key: Mapped[str] = mapped_column(String(128))
+    reconciliation_snapshot_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("reconciliation_snapshots.id")
+    )
+    outbox_event_id: Mapped[UUID | None] = mapped_column(ForeignKey("outbox_events.id"))
     occurred_at: Mapped[datetime] = _created_at()
 
 
@@ -517,6 +530,66 @@ class ReconciliationSnapshotRow(Base):
     created_at: Mapped[datetime] = _created_at()
 
 
+class UserRow(Base):
+    """An employee: roles and business units; can be deactivated."""
+
+    __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "cardinality(roles) > 0 AND roles <@ ARRAY["
+            + ", ".join(repr(value) for value in ROLE_VALUES)
+            + "]::varchar[]",
+            name="roles_known",
+        ),
+        CheckConstraint("cardinality(units) > 0", name="units_nonempty"),
+    )
+
+    user_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    display_name: Mapped[str] = mapped_column(String(200))
+    roles: Mapped[list[str]] = mapped_column(ARRAY(String(32)))
+    units: Mapped[list[str]] = mapped_column(ARRAY(String(64)))
+    active: Mapped[bool] = mapped_column(Boolean)
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = _created_at()
+
+
+class ApiTokenRow(Base):
+    """SHA-256 of a bearer token; the token itself is shown once and never kept."""
+
+    __tablename__ = "api_tokens"
+    __table_args__ = (
+        UniqueConstraint("token_hash"),
+        CheckConstraint(f"token_hash ~ {HASH_PATTERN}", name="token_hash_hex"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64))
+    label: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = _created_at()
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OutboxEventRow(Base):
+    """An event written with a decision; delivery attempts arrive in Stage 09."""
+
+    __tablename__ = "outbox_events"
+    __table_args__ = (
+        CheckConstraint(_one_of("event_type", OUTBOX_EVENT_VALUES), name="event_type"),
+        CheckConstraint("workflow_version > 0", name="workflow_version_positive"),
+        CheckConstraint("jsonb_typeof(payload) = 'object'", name="payload_object"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(64))
+    workflow_id: Mapped[str] = mapped_column(
+        ForeignKey("workflows.workflow_id"), index=True
+    )
+    workflow_version: Mapped[int] = mapped_column(Integer)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = _created_at()
+
+
 # Rows that must never change after insertion; a database trigger enforces this.
 APPEND_ONLY_TABLES = (
     "invoice_versions",
@@ -534,4 +607,5 @@ APPEND_ONLY_TABLES = (
     "reconciliation_rule_versions",
     "reconciliation_currency_rules",
     "reconciliation_snapshots",
+    "outbox_events",
 )

@@ -13,6 +13,7 @@ from app.application.documents import DocumentService
 from app.application.errors import StoredDataIntegrityError
 from app.application.ports import StoredReconciliation, VersionRef
 from app.application.reconciliation import ReconciliationService, StaleReason
+from app.application.users import UserService
 from app.application.workflows import WorkflowService
 from app.demo import build_demo_documents
 from app.domain.models import LineItem
@@ -24,9 +25,8 @@ from app.domain.reconciliation import (
     ReconciliationStatus,
 )
 from app.domain.rules import ValidationPolicy
-from app.domain.workflow import HumanDecision
 from app.samples import invoice_text
-from tests.persistence.conftest import TABLES, USD_RULES, context
+from tests.persistence.conftest import TABLES, UNIT, USD_RULES, context, employee
 
 pytestmark = pytest.mark.postgres
 
@@ -63,6 +63,7 @@ class Setup:
             invoice_version_id=invoice_version.version_id,
             purchase_order_version_id=self.order_version.version_id,
             policy_version_id=self.policy_version.version_id,
+            business_unit=UNIT,
             context=context(f"{workflow_id}:start"),
         )
         return workflow_id
@@ -215,7 +216,9 @@ def test_revise_and_reconcile_again_gives_a_current_snapshot(setup: Setup) -> No
     )
 
 
-def test_duplicate_invoice_and_rejection(setup: Setup) -> None:
+def test_duplicate_invoice_and_rejection(
+    setup: Setup, user_service: UserService
+) -> None:
     """A second workflow for the same supplier invoice is flagged until rejected."""
     first = setup.start("WF-A", "INV-DUP", EXACT, "30.00")
     snapshot_a = setup.reconcile(first)
@@ -232,7 +235,8 @@ def test_duplicate_invoice_and_rejection(setup: Setup) -> None:
     setup.workflows.reject(
         second,
         expected_version=1,
-        decision=HumanDecision("REVIEWER-1", "Duplicate"),
+        reason="Duplicate",
+        actor=employee(user_service, "approver-1", "approver"),
         context=context("reject-b"),
     )
     assert setup.service.freshness(snapshot_a.snapshot_id).is_current
@@ -250,6 +254,7 @@ def test_invoice_without_document_or_order(
         invoice_version_id=version.version_id,
         purchase_order_version_id=None,
         policy_version_id=setup.policy_version.version_id,
+        business_unit=UNIT,
         context=context("nodoc"),
     )
     snapshot = setup.reconcile("WF-NODOC")

@@ -44,7 +44,9 @@ curl -i http://127.0.0.1:8003/health
 
 Expected default response: HTTP `200` with
 `{"status":"ok","service":"enterprise-workflow-agent"}`.
-`/docs`, `/redoc`, and `/openapi.json` should also be available.
+`/docs`, `/redoc`, and `/openapi.json` should also be available. With
+`DATABASE_URL` set, also check `GET /me` without a token (`401`) and with a
+token from `python -m app.users_cli token` (`200`).
 
 Tests cover the health contract, configuration and application construction.
 Domain tests add money/quantity boundaries, exact independent expected totals,
@@ -85,6 +87,20 @@ changes, reproduction, re-reconciliation after `revise`, duplicates and
 rejection, invoices without documents or orders, edited rules, concurrent
 reconciliations and the CLI in separate processes.
 
+Stage 06 tests without a database cover the role-permission matrix, unit
+scoping, `Principal` validation, token shape and hashing, refusal of malformed
+tokens without opening a transaction, required business unit and reason, the
+503 answer without `DATABASE_URL` and the OpenAPI security description. Their
+PostgreSQL tests cover approval with outbox and audit links, idempotent replay
+without a second event, rejection events, refusals by role, unit and four eyes
+that write nothing, other-unit reads, a new order or rule version between
+reconciliation and approval, unmatched and foreign snapshots, deactivation and
+revocation, rollback of decision and outbox after an injected audit failure,
+writers waiting on the approval's advisory lock, the HTTP API through
+`TestClient` (401, `/me`, the full flow, stale snapshot reasons, strict bodies,
+upload limits, foreign units) and the users CLI and decisions demo in separate
+processes.
+
 `tests/test_guide_pdfs.py` checks both PDF guides with pypdf: the source
 fingerprint stored in each PDF must match a fresh hash of the generator,
 `docs/guide/verification.json`, `app/`, migrations and `uv.lock`; every section
@@ -94,7 +110,8 @@ and inspect every page as described in the [guide README](../guide/README.md).
 
 Run the fictional scenarios directly with
 `uv run --locked python -m app.demo`; see [domain usage](domain.md). A successful
-basic check does not prove detailed reconciliation or authenticated approval.
+basic check does not prove detailed reconciliation; approval additionally
+requires a fresh matched reconciliation and an authorized employee.
 
 [GitHub Actions](../CI_CD.md) repeats the configured checks. Local success
 does not confirm a remote run; inspect the result for the relevant commit.

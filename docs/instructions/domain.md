@@ -78,12 +78,13 @@ removes the PO. Omitting policy preserves the existing policy. The `Workflow`
 constructor also rejects state, check and decision combinations that contradict
 each other, including stale or fabricated findings.
 
-`HumanDecision.actor_id` and `reason` are caller-supplied data. This stage does
-not authenticate a user or authorize a role. Keep these commands local until
-server-side identity and authorization are implemented in Stage 06.
+In these in-memory functions `HumanDecision.actor_id` and `reason` are
+caller-supplied data. Since Stage 06 the stored commands fill them from an
+authenticated employee whose role and business unit were checked, and approval
+also requires a fresh matched reconciliation; see [decisions](decisions.md).
 
-The baseline result does not establish full line-by-line reconciliation.
-Stage 05 will add item matching, tolerances and versioned reconciliation
+The baseline result does not establish full line-by-line reconciliation;
+Stage 05 adds item matching, tolerances and versioned reconciliation
 snapshots. The domain functions here remain in-memory; Stage 03 stores their
 results through `WorkflowService` with transactions, audit, optimistic locking
 and idempotency. See [persistence](persistence.md).

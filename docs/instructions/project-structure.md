@@ -4,15 +4,19 @@
 
 Keep the initial application small and add a layer when it owns real behavior.
 
-## Implemented in Stages 01–05
+## Implemented in Stages 01–06
 
 | Location | Responsibility |
 | --- | --- |
 | `app/__init__.py` | Application package and version |
 | `app/config.py` | Validated environment settings and cached loading |
-| `app/main.py` | Application factory, instance settings and router registration |
+| `app/main.py` | Application factory, service composition, error handlers and router registration |
 | `app/api/routes/health.py` | HTTP `GET /health` handler |
 | `app/api/schemas/health.py` | Pydantic response contract |
+| `app/api/dependencies.py` | Services container, bearer authentication, `Idempotency-Key` context |
+| `app/api/errors.py` | One error body shape; application and domain codes to HTTP statuses |
+| `app/api/routes/business.py` | Stage 06 endpoints: `/me`, documents, reference, workflows, reconciliations, decisions, audit, outbox |
+| `app/api/schemas/business.py` | Strict request bodies and response models |
 | `app/domain/errors.py` | Stable domain errors with code and field |
 | `app/domain/money.py` | Exact two-decimal money, supported currencies and quantity validation |
 | `app/domain/models.py` | Immutable invoice, purchase order and line items |
@@ -25,15 +29,19 @@ Keep the initial application small and add a layer when it owns real behavior.
 | `app/demo.py` | Offline fictional examples printed as JSON |
 | `app/application/ports.py` | Stored records, command context and repository/unit-of-work protocols |
 | `app/application/errors.py` | Stable application error codes |
-| `app/application/workflows.py` | `WorkflowService`: versions, commands, transactions, idempotency |
+| `app/application/workflows.py` | `WorkflowService`: versions, commands, transactions, idempotency, decisions and outbox |
+| `app/application/access.py` | Roles, permissions, `Principal`, `authorize`, token generation and hashing |
+| `app/application/users.py` | `UserService` and `current_principal` (rights re-read inside a transaction) |
+| `app/application/versions.py` | Version appends and advisory lock keys |
 | `app/application/documents.py` | `prepare_document`, `DocumentService`: intake, storage and evidence |
 | `app/application/reconciliation.py` | `ReconciliationService`: snapshots, inputs hash, freshness, reproduction, reports |
 | `app/infrastructure/db/models.py` | SQLAlchemy tables, `NUMERIC` columns and check constraints |
 | `app/infrastructure/db/repository.py` | PostgreSQL workflow repository and hash verification |
 | `app/infrastructure/db/documents.py` | PostgreSQL document repository |
 | `app/infrastructure/db/reconciliations.py` | PostgreSQL storage for rule versions and reconciliation snapshots |
+| `app/infrastructure/db/users.py` | PostgreSQL storage for employees and token hashes |
 | `app/infrastructure/db/inserts.py` | Immediate inserts and constraint-race translation |
-| `app/infrastructure/db/unit_of_work.py` | One session per command, shared by both repositories |
+| `app/infrastructure/db/unit_of_work.py` | One session per command, shared by all repositories |
 | `app/infrastructure/documents/` | Text decoding and the isolated `python -I` PDF worker |
 | `app/infrastructure/extraction/labeled_text.py` | Deterministic `Label: value` field extractor |
 | `app/infrastructure/db/session.py` | URL validation, test-database guard, engine and service composition |
@@ -41,6 +49,8 @@ Keep the initial application small and add a layer when it owns real behavior.
 | `app/samples.py` | Fictional text/PDF samples and a deterministic minimal PDF writer |
 | `app/documents_cli.py` | Document `write-samples`, `ingest`, `show`, `evidence` and `demo` |
 | `app/reconciliation_cli.py` | Reconciliation `demo` and `show` |
+| `app/users_cli.py` | Employee `create`, `token`, `revoke`, `deactivate`, `activate`, `list` |
+| `app/decisions_demo.py` | Fictional Stage 06 decision scenario and `show` |
 | `alembic.ini`, `migrations/` | Alembic configuration, environment and revisions |
 | `tests/` | Automated checks; `tests/persistence/` needs `TEST_DATABASE_URL` |
 | `scripts/check_docs.py` | Local Markdown link validation |
@@ -50,10 +60,13 @@ Keep the initial application small and add a layer when it owns real behavior.
 | `pyproject.toml`, `uv.lock` | Dependencies, tooling and reproducible resolution |
 | `.python-version` | Python 3.12 interpreter selection |
 | `.env.example` | Non-secret configuration example, including a commented `DATABASE_URL` |
+| `.gitattributes` | Marks generated PDFs as binary so diffs and whitespace checks skip them |
 
-The request flow is `client → Uvicorn → FastAPI → health() → HealthResponse
-→ JSON`. `create_app()` can accept explicit settings; the route reads settings
-from its own application instance.
+The liveness flow is `client → Uvicorn → FastAPI → health() → HealthResponse
+→ JSON`. A business request flows `client → bearer dependency →
+UserService.authenticate → route → service (rights re-checked in the
+transaction) → response model`. `create_app()` can accept explicit settings
+and services; without `DATABASE_URL` business endpoints answer 503.
 
 ## Documentation
 
@@ -69,6 +82,9 @@ from its own application instance.
 | `docs/instructions/documents.md` | Intake limits, field schema, parser, storage and commands |
 | `docs/STAGE_05.md` | Reconciliation walkthrough in Russian |
 | `docs/instructions/reconciliation.md` | Rules, codes, snapshots, freshness and commands |
+| `docs/STAGE_06.md` | Employee decisions, roles, tokens, locks and outbox walkthrough in Russian |
+| `docs/instructions/decisions.md` | Roles, account commands, approval checks, outbox and demo |
+| `docs/instructions/usage.md` | HTTP endpoints, authentication, idempotency and error codes |
 | `docs/instructions/` | Short operational instructions in English |
 | `docs/CI_CD.md` | CI configuration and limits of remote verification |
 | `docs/VERIFICATION.md` | Recorded command outcomes and limitations |
@@ -82,7 +98,7 @@ directories to create now:
 
 | Location | Add when needed for |
 | --- | --- |
-| `app/infrastructure/` (other adapters) | Model providers and event delivery |
+| `app/infrastructure/` (other adapters) | Model providers and outbox delivery |
 | `ui/` | A client that calls the API |
 | `evals/` | Versioned evaluation cases and independent expected results |
 

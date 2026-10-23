@@ -7,7 +7,9 @@
 Stage 05 compares a workflow's pinned invoice and purchase order line by line
 under a versioned rule set, stores an immutable snapshot of every input, and
 reports when that snapshot becomes stale. All arithmetic is deterministic
-`Decimal` code; no model computes totals. No HTTP endpoint is added.
+`Decimal` code; no model computes totals. Since Stage 06 reconciliation is
+also available over HTTP for users with the `reconcile` permission; see
+[API usage](usage.md).
 
 ## Commands
 
@@ -94,6 +96,6 @@ number. Reconciliation does not change workflow state or write audit events.
 
 ## Limits
 
-`approve` does not yet require a fresh matched snapshot (Stage 06). No
-percentage tolerances, taxes, discounts or tracking of quantities billed by
+Since Stage 06 `approve` requires a fresh matched snapshot; see
+[decisions](decisions.md). No percentage tolerances, taxes, discounts or tracking of quantities billed by
 earlier invoices; duplicates only by supplier and invoice number.

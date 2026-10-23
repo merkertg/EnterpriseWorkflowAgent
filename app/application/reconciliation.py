@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from uuid import UUID, uuid4
 
+from app.application.access import Permission, Principal
 from app.application.documents import Citation, cite
 from app.application.errors import (
     ConcurrentWriteError,
@@ -26,7 +27,8 @@ from app.application.ports import (
     Versioned,
     VersionRef,
 )
-from app.application.workflows import append_version
+from app.application.users import current_principal
+from app.application.versions import append_version, rules_key
 from app.domain.content_hash import content_hash, extraction_hash, sha256_hex
 from app.domain.errors import DomainValidationError
 from app.domain.models import Invoice, PurchaseOrder, validate_text
@@ -123,6 +125,51 @@ def _require_uuid(value: object, field: str) -> None:
         raise DomainValidationError("invalid_type", field, f"{field} must be a UUID.")
 
 
+def compute_freshness(unit: UnitOfWork, snapshot: StoredReconciliation) -> Freshness:
+    """Compare a snapshot with current inputs inside the caller's transaction.
+
+    Approval calls this after locking the order, rules and invoice-number keys,
+    so no new version can appear between this check and the commit.
+    """
+    inputs = snapshot.inputs
+    reasons: list[StaleReason] = []
+    workflow = unit.repository.get_workflow(snapshot.workflow_id)
+    invoice = unit.repository.get_invoice_version(inputs.invoice_version.version_id)
+    if workflow is None or invoice is None:
+        raise StoredDataIntegrityError("Snapshot inputs are missing.")
+    if (
+        workflow.invoice_version != inputs.invoice_version
+        or workflow.purchase_order_version != inputs.purchase_order_version
+    ):
+        reasons.append(StaleReason.WORKFLOW_INPUTS_CHANGED)
+    pinned = inputs.purchase_order_version
+    order_id = invoice.value.purchase_order_id if pinned is None else pinned.business_id
+    latest_order = unit.repository.latest_purchase_order_version(order_id)
+    if pinned is None and latest_order is not None:
+        reasons.append(StaleReason.PURCHASE_ORDER_AVAILABLE)
+    elif pinned is not None and latest_order != pinned:
+        reasons.append(StaleReason.PURCHASE_ORDER_CHANGED)
+    latest_rules = unit.reconciliations.latest_rules_version(
+        inputs.rules_version.business_id
+    )
+    if latest_rules != inputs.rules_version:
+        reasons.append(StaleReason.RULES_CHANGED)
+    duplicates = unit.reconciliations.duplicate_workflow_ids(
+        invoice.value.supplier_id, invoice.value.invoice_id, snapshot.workflow_id
+    )
+    if duplicates != inputs.duplicate_workflow_ids:
+        reasons.append(StaleReason.DUPLICATES_CHANGED)
+    return Freshness(tuple(reasons))
+
+
+def _authorize_view(unit: UnitOfWork, workflow_id: str, actor: Principal) -> None:
+    """Hide reconciliations of workflows outside the actor's business units."""
+    stored = unit.repository.get_workflow(workflow_id)
+    if stored is None:
+        raise NotFoundError("Workflow was not found.")
+    current_principal(unit, actor, Permission.VIEW, stored.business_unit)
+
+
 class ReconciliationService:
     """Reconcile workflows against versioned rules; one transaction per call."""
 
@@ -147,6 +194,8 @@ class ReconciliationService:
         """Append one rule version in its own transaction."""
         with self._unit_of_work() as unit:
             store = unit.reconciliations
+            # Serializes with approvals that check this rule set is still latest.
+            unit.repository.lock_keys((rules_key(rules.rules_id),))
             ref = append_version(
                 rules.rules_id,
                 content_hash(rules),
@@ -157,26 +206,33 @@ class ReconciliationService:
             return ref
 
     def reconcile(
-        self, workflow_id: str, *, rules_version_id: UUID
+        self,
+        workflow_id: str,
+        *,
+        rules_version_id: UUID,
+        actor: Principal | None = None,
     ) -> StoredReconciliation:
         """Compare the workflow's pinned invoice and order under a rule version."""
         workflow_id = validate_text(workflow_id, "workflow_id")
         _require_uuid(rules_version_id, "rules_version_id")
         for _attempt in range(_ATTEMPTS):
             try:
-                snapshot_id = self._reconcile_once(workflow_id, rules_version_id)
+                snapshot_id = self._reconcile_once(workflow_id, rules_version_id, actor)
             except ConcurrentWriteError:
                 # A concurrent identical reconciliation won; the retry reuses it.
                 continue
             return self.get_snapshot(snapshot_id)
         raise VersionConflictError("Concurrent reconciliations did not settle.")
 
-    def _reconcile_once(self, workflow_id: str, rules_version_id: UUID) -> UUID:
+    def _reconcile_once(
+        self, workflow_id: str, rules_version_id: UUID, actor: Principal | None
+    ) -> UUID:
         """Reuse a snapshot with identical inputs or store a new one."""
         with self._unit_of_work() as unit:
             stored = unit.repository.get_workflow(workflow_id)
             if stored is None:
                 raise NotFoundError("Workflow was not found.")
+            current_principal(unit, actor, Permission.RECONCILE, stored.business_unit)
             rules = unit.reconciliations.get_rules_version(rules_version_id)
             if rules is None:
                 raise NotFoundError("Reconciliation rules version was not found.")
@@ -229,19 +285,27 @@ class ReconciliationService:
             unit.commit()
             return snapshot.snapshot_id
 
-    def get_snapshot(self, snapshot_id: UUID) -> StoredReconciliation:
-        """Return one stored snapshot."""
+    def get_snapshot(
+        self, snapshot_id: UUID, *, actor: Principal | None = None
+    ) -> StoredReconciliation:
+        """Return one stored snapshot; an actor must see its workflow's unit."""
         _require_uuid(snapshot_id, "snapshot_id")
         with self._unit_of_work() as unit:
             snapshot = unit.reconciliations.get_snapshot(snapshot_id)
-        if snapshot is None:
-            raise NotFoundError("Reconciliation snapshot was not found.")
+            if snapshot is None:
+                raise NotFoundError("Reconciliation snapshot was not found.")
+            if actor is not None:
+                _authorize_view(unit, snapshot.workflow_id, actor)
         return snapshot
 
-    def latest(self, workflow_id: str) -> StoredReconciliation:
+    def latest(
+        self, workflow_id: str, *, actor: Principal | None = None
+    ) -> StoredReconciliation:
         """Return a workflow's most recent snapshot."""
         workflow_id = validate_text(workflow_id, "workflow_id")
         with self._unit_of_work() as unit:
+            if actor is not None:
+                _authorize_view(unit, workflow_id, actor)
             snapshot = unit.reconciliations.latest_snapshot(workflow_id)
         if snapshot is None:
             raise NotFoundError("The workflow has no reconciliation yet.")
@@ -250,44 +314,8 @@ class ReconciliationService:
     def freshness(self, snapshot_id: UUID) -> Freshness:
         """Compare a snapshot's inputs with what currently applies."""
         snapshot = self.get_snapshot(snapshot_id)
-        inputs = snapshot.inputs
-        reasons: list[StaleReason] = []
         with self._unit_of_work() as unit:
-            workflow = unit.repository.get_workflow(snapshot.workflow_id)
-            invoice = unit.repository.get_invoice_version(
-                inputs.invoice_version.version_id
-            )
-            if workflow is None or invoice is None:
-                raise StoredDataIntegrityError("Snapshot inputs are missing.")
-            if (
-                workflow.invoice_version != inputs.invoice_version
-                or workflow.purchase_order_version != inputs.purchase_order_version
-            ):
-                reasons.append(StaleReason.WORKFLOW_INPUTS_CHANGED)
-            pinned = inputs.purchase_order_version
-            order_id = (
-                invoice.value.purchase_order_id
-                if pinned is None
-                else pinned.business_id
-            )
-            latest_order = unit.repository.latest_purchase_order_version(order_id)
-            if pinned is None and latest_order is not None:
-                reasons.append(StaleReason.PURCHASE_ORDER_AVAILABLE)
-            elif pinned is not None and latest_order != pinned:
-                reasons.append(StaleReason.PURCHASE_ORDER_CHANGED)
-            latest_rules = unit.reconciliations.latest_rules_version(
-                inputs.rules_version.business_id
-            )
-            if latest_rules != inputs.rules_version:
-                reasons.append(StaleReason.RULES_CHANGED)
-            duplicates = unit.reconciliations.duplicate_workflow_ids(
-                invoice.value.supplier_id,
-                invoice.value.invoice_id,
-                snapshot.workflow_id,
-            )
-            if duplicates != inputs.duplicate_workflow_ids:
-                reasons.append(StaleReason.DUPLICATES_CHANGED)
-        return Freshness(tuple(reasons))
+            return compute_freshness(unit, snapshot)
 
     def reproduce(self, snapshot_id: UUID) -> ReconciliationResult:
         """Recompute from the snapshot's own versions, never the latest ones."""
@@ -345,9 +373,11 @@ class ReconciliationService:
             inputs.duplicate_workflow_ids,
         )
 
-    def report(self, snapshot_id: UUID) -> ReconciliationReport:
+    def report(
+        self, snapshot_id: UUID, *, actor: Principal | None = None
+    ) -> ReconciliationReport:
         """Combine a snapshot with freshness, reproduction and quoted sources."""
-        snapshot = self.get_snapshot(snapshot_id)
+        snapshot = self.get_snapshot(snapshot_id, actor=actor)
         pages: tuple[str, ...] = ()
         if snapshot.inputs.source_document_id is not None:
             with self._unit_of_work() as unit:

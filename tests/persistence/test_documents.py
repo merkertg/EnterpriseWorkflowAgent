@@ -16,7 +16,7 @@ from app.domain.extraction import ExtractionResult, ExtractionStatus, FieldStatu
 from app.domain.rules import ValidationPolicy
 from app.domain.workflow import WorkflowState
 from app.samples import sample_files
-from tests.persistence.conftest import TABLES, context
+from tests.persistence.conftest import TABLES, UNIT, context
 
 pytestmark = pytest.mark.postgres
 SAMPLES = sample_files()
@@ -151,6 +151,7 @@ def test_extracted_invoice_can_start_a_workflow(
         invoice_version_id=invoice_version.version_id,
         purchase_order_version_id=order_version.version_id,
         policy_version_id=policy_version.version_id,
+        business_unit=UNIT,
         context=context("doc-start"),
     )
     checked = service.check(

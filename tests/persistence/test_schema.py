@@ -9,6 +9,7 @@ from alembic.migration import MigrationContext
 from sqlalchemy import Engine, inspect, text
 from sqlalchemy.exc import DBAPIError
 
+from app.application.access import Principal
 from app.application.documents import DocumentService
 from app.application.reconciliation import ReconciliationService
 from app.application.workflows import WorkflowService
@@ -81,6 +82,7 @@ def test_history_tables_reject_update_and_delete(
     service: WorkflowService,
     document_service: DocumentService,
     reconciliation_service: ReconciliationService,
+    approver: Principal,
     seed: Seed,
     table: str,
 ) -> None:
@@ -90,6 +92,14 @@ def test_history_tables_reject_update_and_delete(
     rules = reconciliation_service.record_rules(USD_RULES)
     reconciliation_service.reconcile(
         seed.workflow_id, rules_version_id=rules.version_id
+    )
+    # A decision writes the outbox row; every table now has at least one row.
+    service.reject(
+        seed.workflow_id,
+        expected_version=2,
+        reason="Fictional rejection",
+        actor=approver,
+        context=context("reject"),
     )
     for statement in (f"UPDATE {table} SET {_column(table)}", f"DELETE FROM {table}"):
         with pytest.raises(DBAPIError, match="append-only"), engine.begin() as conn:

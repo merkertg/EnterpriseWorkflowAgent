@@ -93,9 +93,11 @@ def add_stage01(story: list[Any], facts: Facts) -> None:
         p(
             tr(
                 "/health подтверждает только, что процесс отвечает. Базу, документы "
-                "и модель он не проверяет.",
+                "и модель он не проверяет. Деловые адреса этапа 06 требуют "
+                "DATABASE_URL и токен.",
                 "/health only confirms that the process answers. It does not check "
-                "the database, documents or a model.",
+                "the database, documents or a model. Stage 06 business endpoints "
+                "need DATABASE_URL and a token.",
             ),
             SMALL,
         ),
@@ -480,10 +482,12 @@ def add_stage02(story: list[Any], facts: Facts) -> None:
         Spacer(1, 6),
         callout(
             tr(
-                "HumanDecision(actor_id, reason) — данные, переданные вызывающим кодом, "
-                "а не подтверждённая личность. Вход и роли появятся на этапе 06.",
-                "HumanDecision(actor_id, reason) is caller-supplied data, not a "
-                "verified identity. Sign-in and roles arrive in Stage 06.",
+                "В домене HumanDecision(actor_id, reason) — просто данные. С этапа 06 "
+                "сервис заполняет их сотрудником, которого узнал по токену и чьи "
+                "роль и подразделение только что проверил.",
+                "In the domain HumanDecision(actor_id, reason) is plain data. Since "
+                "Stage 06 the service fills it with an employee identified by token "
+                "whose role and business unit it has just checked.",
             ),
             GREEN,
             GREEN_L,

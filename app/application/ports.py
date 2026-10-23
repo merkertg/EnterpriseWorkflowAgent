@@ -8,9 +8,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from types import TracebackType
-from typing import Protocol, Self
+from typing import Any, Protocol, Self
 from uuid import UUID
 
+from app.application.access import Principal, Role
 from app.domain.documents import DocumentLimits, MediaType
 from app.domain.errors import DomainValidationError
 from app.domain.extraction import (
@@ -79,6 +80,9 @@ class StoredWorkflow:
     purchase_order_version: VersionRef | None
     policy_version: VersionRef
     last_snapshot_id: UUID | None
+    business_unit: str
+    created_by: str | None = None
+    decision_reconciliation_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,9 +136,88 @@ class AuditEvent:
     actor_id: str | None
     source: str
     idempotency_key: str
+    reconciliation_snapshot_id: UUID | None = None
+    outbox_event_id: UUID | None = None
     # Assigned by the database when the event is stored.
     event_id: int | None = None
     occurred_at: datetime | None = None
+
+
+class OutboxEventType(StrEnum):
+    """Facts announced to a later process step; nothing here pays or sends."""
+
+    INVOICE_APPROVED = "invoice.approved"
+    INVOICE_REJECTED = "invoice.rejected"
+
+
+@dataclass(frozen=True, slots=True)
+class OutboxEvent:
+    """An event stored with the decision; delivery is Stage 09 work."""
+
+    event_id: UUID
+    event_type: OutboxEventType
+    workflow_id: str
+    workflow_version: int
+    payload: dict[str, Any]
+    created_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class UserRecord:
+    """An employee account; the token is checked elsewhere."""
+
+    user_id: str
+    display_name: str
+    roles: frozenset[Role]
+    units: frozenset[str]
+    active: bool
+
+    def principal(self) -> Principal:
+        """Return the current rights of this user."""
+        return Principal(self.user_id, self.roles, self.units)
+
+
+@dataclass(frozen=True, slots=True)
+class ApiTokenRecord:
+    """Token metadata; the secret itself is never stored."""
+
+    token_id: UUID
+    user_id: str
+    label: str
+    created_at: datetime | None
+    revoked_at: datetime | None
+
+
+class UserRepository(Protocol):
+    """Store employees and hashed API tokens in the transaction."""
+
+    def get_user(self, user_id: str, *, lock: bool = False) -> UserRecord | None:
+        """Return a user; lock=True holds a share lock until commit."""
+        ...
+
+    def add_user(self, user: UserRecord) -> None:
+        """Insert a user; a duplicate ID raises UserExistsError."""
+        ...
+
+    def set_active(self, user_id: str, active: bool) -> bool:
+        """Activate or deactivate a user; return False if unknown."""
+        ...
+
+    def list_users(self) -> tuple[UserRecord, ...]:
+        """Return all users ordered by ID."""
+        ...
+
+    def add_token(self, token_id: UUID, user_id: str, digest: str, label: str) -> None:
+        """Store a token hash for a user."""
+        ...
+
+    def find_token(self, digest: str) -> tuple[ApiTokenRecord, UserRecord] | None:
+        """Return a token and its user by hash, revoked or not."""
+        ...
+
+    def revoke_token(self, token_id: UUID) -> bool:
+        """Mark a token revoked; return False if unknown or already revoked."""
+        ...
 
 
 class WorkflowRepository(Protocol):
@@ -216,6 +299,18 @@ class WorkflowRepository(Protocol):
 
     def add_idempotency_record(self, record: IdempotencyRecord) -> None:
         """Claim a key immediately; a concurrent winner raises a claimed error."""
+        ...
+
+    def lock_keys(self, keys: tuple[str, ...]) -> None:
+        """Hold transaction-scoped locks on business keys, in sorted order."""
+        ...
+
+    def add_outbox_event(self, event: OutboxEvent) -> None:
+        """Append an outbox event in the current transaction."""
+        ...
+
+    def list_outbox_events(self, workflow_id: str) -> tuple[OutboxEvent, ...]:
+        """Return a workflow's outbox events in creation order."""
         ...
 
 
@@ -402,6 +497,11 @@ class UnitOfWork(Protocol):
     @property
     def reconciliations(self) -> ReconciliationRepository:
         """Return the reconciliation repository bound to the same transaction."""
+        ...
+
+    @property
+    def users(self) -> UserRepository:
+        """Return the user repository bound to the same transaction."""
         ...
 
     def __enter__(self) -> Self:

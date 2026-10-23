@@ -69,6 +69,18 @@ _TABLE_TEXT = {
         "Снимок сверки (этап 05)",
         "Reconciliation snapshot (stage 05)",
     ),
+    "users": (
+        "Сотрудник: роли, подразделения, активность (этап 06)",
+        "Employee: roles, units, active flag (stage 06)",
+    ),
+    "api_tokens": (
+        "SHA-256 токена, метка, время отзыва (этап 06)",
+        "Token SHA-256, label, revocation time (stage 06)",
+    ),
+    "outbox_events": (
+        "Событие решения для следующего шага (этап 06)",
+        "Decision event for the next step (stage 06)",
+    ),
 }
 
 
@@ -442,8 +454,8 @@ def add_stage03(story: list[Any], facts: Facts) -> None:
                 [
                     mono("actor_id, source, idempotency_key"),
                     tr(
-                        "Кто и откуда — заявлено вызывающим",
-                        "Who and from where, caller-declared",
+                        "Кто и откуда; с этапа 06 — проверенный сотрудник",
+                        "Who and from where; since Stage 06 a checked employee",
                     ),
                 ],
                 [
@@ -475,11 +487,11 @@ def add_stage03(story: list[Any], facts: Facts) -> None:
         p(
             tr(
                 "S1 по-прежнему загружается с заказом v1, итогом 30.00 и прежними "
-                "хешами. Пометка устаревших результатов — этап 05, проверка версий "
-                "в транзакции согласования — этап 06.",
+                "хешами. Пометка устаревших результатов появилась на этапе 05, "
+                "проверка версий в транзакции согласования — на этапе 06.",
                 "S1 still loads with PO v1, the 30.00 total and the original hashes. "
-                "Marking stale results is Stage 05; checking versions inside the "
-                "approval transaction is Stage 06.",
+                "Stage 05 added stale marking; Stage 06 checks versions inside the "
+                "approval transaction.",
             ),
             SMALL,
         ),

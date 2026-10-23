@@ -34,6 +34,7 @@ from guide.stage01_02 import add_stage01, add_stage02
 from guide.stage03 import add_stage03
 from guide.stage04 import add_stage04
 from guide.stage05 import add_stage05
+from guide.stage06 import add_stage06
 from guide.toc import section
 
 _REMOTE = {
@@ -144,6 +145,13 @@ def _overview(story: list[Any]) -> None:
                         "Line reconciliation under tolerance rules, snapshots, staleness",
                     ),
                 ],
+                [
+                    "06",
+                    tr(
+                        "Токены, роли, подразделения, HTTP API, одобрение по свежей сверке, outbox",
+                        "Tokens, roles, units, HTTP API, approval on fresh reconciliation, outbox",
+                    ),
+                ],
             ],
             [50, W - 50],
         ),
@@ -163,7 +171,7 @@ def _overview(story: list[Any]) -> None:
 
 
 def _cheat_sheet(story: list[Any]) -> None:
-    """Section 18: the commands a learner uses most."""
+    """Closing section: the commands a learner uses most."""
     section(
         story,
         "Шпаргалка команд",
@@ -217,6 +225,11 @@ def _cheat_sheet(story: list[Any]) -> None:
             "... reconciliation_cli show SNAPSHOT_ID",
             tr("Отчёт снимка сверки", "Reconciliation snapshot report"),
         ),
+        (
+            "... users_cli create | token | revoke | list",
+            tr("Сотрудники и токены", "Employees and tokens"),
+        ),
+        ("... decisions_demo", tr("Демонстрация этапа 06", "Stage 06 demo")),
         ("uv run --locked ruff check .", tr("Линтер", "Linter")),
         (
             "uv run --locked mypy app tests scripts migrations",
@@ -261,7 +274,7 @@ def _cheat_sheet(story: list[Any]) -> None:
 
 
 def _common_errors(story: list[Any]) -> None:
-    """Section 19: symptoms and what to do about them."""
+    """Closing section: symptoms and what to do about them."""
     section(
         story,
         "Типичные ошибки",
@@ -357,6 +370,31 @@ def _common_errors(story: list[Any]) -> None:
             ),
         ),
         (
+            mono("401 unauthenticated"),
+            tr(
+                "Нет токена, он отозван или сотрудник отключён",
+                "No token, a revoked one, or a deactivated user",
+            ),
+        ),
+        (
+            tr("404 для существующего процесса", "404 for an existing workflow"),
+            tr("Процесс в чужом подразделении", "The workflow is in another unit"),
+        ),
+        (
+            mono("409 stale_reconciliation"),
+            tr(
+                "Новая сверка и решение по новому снимку",
+                "Reconcile again and decide on the new snapshot",
+            ),
+        ),
+        (
+            mono("503 database_not_configured"),
+            tr(
+                "Задай DATABASE_URL и перезапусти API",
+                "Set DATABASE_URL and restart the API",
+            ),
+        ),
+        (
             tr("Тест свежести PDF упал", "PDF freshness test failed"),
             tr(
                 "Пересобери оба PDF и проверь страницы",
@@ -375,7 +413,7 @@ def _common_errors(story: list[Any]) -> None:
 
 
 def _questions(story: list[Any]) -> None:
-    """Section 20: questions to answer after reading the code."""
+    """Closing section: questions to answer after reading the code."""
     section(
         story,
         "Проверь себя",
@@ -436,6 +474,18 @@ def _questions(story: list[Any]) -> None:
             "Why is an old reconciliation snapshot recomputed rather than edited?",
         ),
         tr(
+            "Почему чужое подразделение даёт 404, а нехватка роли — 403?",
+            "Why does another unit give 404 but a missing role 403?",
+        ),
+        tr(
+            "Зачем одобрению блокировки, если свежесть снимка уже проверена?",
+            "Why does approval need locks when freshness is already checked?",
+        ),
+        tr(
+            "Почему событие outbox нельзя отправить прямо из команды?",
+            "Why can't a command send the outbox event itself?",
+        ),
+        tr(
             "Что пока не защищено и на каком этапе это появится?",
             "What is not protected yet, and in which stage will it be?",
         ),
@@ -446,7 +496,7 @@ def _questions(story: list[Any]) -> None:
 
 
 def _results(story: list[Any], verification: dict[str, Any]) -> None:
-    """Section 21: facts from verification.json, with remote CI kept separate."""
+    """Last section: facts from verification.json, with remote CI kept apart."""
     section(
         story,
         "Итоги проверки",
@@ -526,12 +576,12 @@ def _results(story: list[Any], verification: dict[str, Any]) -> None:
         Spacer(1, 6),
         callout(
             tr(
-                "Не реализовано: вход, роли, HTTP-команды и одобрение по свежему "
-                "снимку сверки (06), модель (07), интерфейс (08), лимит памяти "
-                "PDF-процесса и outbox-доставка (09), Docker-выпуск (10).",
-                "Not implemented: sign-in, roles, HTTP commands and approval on a fresh "
-                "reconciliation snapshot (06), a model (07), a UI (08), a PDF worker "
-                "memory limit and outbox delivery (09), Docker release (10).",
+                "Не реализовано: модель (07), интерфейс (08), лимит памяти "
+                "PDF-процесса и доставка outbox (09), Docker-выпуск (10). Срок "
+                "действия токенов, SSO и управление ролями через HTTP — вне объёма.",
+                "Not implemented: a model (07), a UI (08), a PDF worker memory limit "
+                "and outbox delivery (09), Docker release (10). Token expiry, SSO and "
+                "role management over HTTP are out of scope.",
             ),
             GREEN,
             GREEN_L,
@@ -548,6 +598,7 @@ def build_story(facts: Facts, verification: dict[str, Any]) -> list[Any]:
     add_stage03(story, facts)
     add_stage04(story, facts)
     add_stage05(story, facts)
+    add_stage06(story, facts)
     _cheat_sheet(story)
     _common_errors(story)
     _questions(story)

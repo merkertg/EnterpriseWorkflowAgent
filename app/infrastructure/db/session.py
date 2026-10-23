@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.application.documents import DocumentService
 from app.application.reconciliation import ReconciliationService
+from app.application.users import UserService
 from app.application.workflows import WorkflowService
 from app.domain.documents import DocumentLimits
 from app.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
@@ -80,3 +81,8 @@ def build_reconciliation_service(engine: Engine) -> ReconciliationService:
     return ReconciliationService(
         partial(SqlAlchemyUnitOfWork, create_session_factory(engine))
     )
+
+
+def build_user_service(engine: Engine) -> UserService:
+    """Compose employee and token management with one unit of work per call."""
+    return UserService(partial(SqlAlchemyUnitOfWork, create_session_factory(engine)))

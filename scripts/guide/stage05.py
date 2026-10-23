@@ -276,10 +276,12 @@ def add_stage05(story: list[Any], facts: Facts) -> None:
         Spacer(1, 6),
         callout(
             tr(
-                "approve пока не требует снимка. На этапе 06 одобрение будет ссылаться "
-                "на свежий matched-снимок и проверять его в той же транзакции.",
-                "approve does not require a snapshot yet. In Stage 06 an approval will "
-                "reference a fresh matched snapshot and check it in the same transaction.",
+                "С этапа 06 одобрение ссылается на снимок и в своей транзакции "
+                "проверяет, что он свежий и matched (раздел «Одобрение по свежей "
+                "сверке»).",
+                "Since Stage 06 an approval cites a snapshot and checks inside its "
+                "own transaction that it is fresh and matched (section “Approval "
+                "on a fresh reconciliation”).",
             ),
             GREEN,
             GREEN_L,

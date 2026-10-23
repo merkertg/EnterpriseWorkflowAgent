@@ -2,11 +2,12 @@
 
 from dataclasses import replace
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import Engine, text
 
+from app.application.access import Principal
 from app.application.errors import (
     IdempotencyKeyReusedError,
     NotFoundError,
@@ -14,18 +15,31 @@ from app.application.errors import (
     WorkflowAlreadyExistsError,
 )
 from app.application.ports import CommandName
+from app.application.reconciliation import ReconciliationService
 from app.application.workflows import WorkflowService
 from app.domain.errors import DomainValidationError
 from app.domain.money import Currency
+from app.domain.reconciliation import ReconciliationRules
 from app.domain.rules import ValidationPolicy
 from app.domain.workflow import HumanDecision, WorkflowState
 from app.infrastructure.db.repository import SqlAlchemyWorkflowRepository
 from app.infrastructure.db.session import build_workflow_service, create_database_engine
-from tests.persistence.conftest import TABLES, Seed, context
+from tests.persistence.conftest import TABLES, UNIT, USD_RULES, Seed, context
 
 pytestmark = pytest.mark.postgres
 
-DECISION = HumanDecision("REVIEWER-TEST-1", "Fictional documents reviewed")
+REASON = "Fictional documents reviewed"
+# The seed invoice is created in code, so these rules do not ask for a document.
+CODE_RULES = ReconciliationRules(
+    "test-rules-code", USD_RULES.currency_rules, require_source_document=False
+)
+
+
+def _matched(reconciliations: ReconciliationService, workflow_id: str) -> UUID:
+    """Reconcile the seed workflow; its demo invoice matches the demo order."""
+    rules = reconciliations.record_rules(CODE_RULES)
+    snapshot = reconciliations.reconcile(workflow_id, rules_version_id=rules.version_id)
+    return snapshot.snapshot_id
 
 
 def _counts(engine: Engine) -> dict[str, int]:
@@ -58,12 +72,20 @@ def test_start_stores_a_received_workflow_and_audit_event(
 
 
 def test_happy_path_versions_snapshot_and_audit(
-    service: WorkflowService, seed: Seed
+    service: WorkflowService,
+    reconciliation_service: ReconciliationService,
+    approver: Principal,
+    seed: Seed,
 ) -> None:
     """start -> check -> approve gives versions 1, 2, 3 and a pinned snapshot."""
     checked = service.check(seed.workflow_id, expected_version=1, context=context("c"))
     approved = service.approve(
-        seed.workflow_id, expected_version=2, decision=DECISION, context=context("a")
+        seed.workflow_id,
+        expected_version=2,
+        reconciliation_snapshot_id=_matched(reconciliation_service, seed.workflow_id),
+        reason=REASON,
+        actor=approver,
+        context=context("a"),
     )
     assert (checked.state, checked.version) == (WorkflowState.AWAITING_APPROVAL, 2)
     assert (approved.state, approved.version) == (WorkflowState.APPROVED, 3)
@@ -78,14 +100,15 @@ def test_happy_path_versions_snapshot_and_audit(
 
     stored = service.get_workflow(seed.workflow_id)
     assert stored.last_snapshot_id == checked.snapshot_id
-    assert stored.workflow.decision == DECISION
+    assert stored.workflow.decision == HumanDecision("approver-1", REASON)
+    assert stored.business_unit == UNIT
     trail = service.audit_trail(seed.workflow_id)
     assert [(e.command.value, e.workflow_version) for e in trail] == [
         ("start", 1),
         ("check", 2),
         ("approve", 3),
     ]
-    assert trail[2].actor_id == "REVIEWER-TEST-1"
+    assert trail[2].actor_id == "approver-1"
 
 
 def test_data_survives_a_new_engine_and_connection_pool(
@@ -142,7 +165,7 @@ def test_same_key_and_request_replays_without_new_writes(
 
 
 def test_same_key_with_another_request_is_rejected(
-    service: WorkflowService, seed: Seed
+    service: WorkflowService, approver: Principal, seed: Seed
 ) -> None:
     """A key identifies one intent; other arguments cannot reuse it."""
     service.check(seed.workflow_id, expected_version=1, context=context("c"))
@@ -150,13 +173,14 @@ def test_same_key_with_another_request_is_rejected(
         service.reject(
             seed.workflow_id,
             expected_version=2,
-            decision=DECISION,
+            reason=REASON,
+            actor=approver,
             context=context("c"),
         )
 
 
 def test_stale_expected_version_changes_nothing(
-    engine: Engine, service: WorkflowService, seed: Seed
+    engine: Engine, service: WorkflowService, approver: Principal, seed: Seed
 ) -> None:
     """Optimistic locking rejects a command based on an older read."""
     service.check(seed.workflow_id, expected_version=1, context=context("c"))
@@ -165,7 +189,8 @@ def test_stale_expected_version_changes_nothing(
         service.reject(
             seed.workflow_id,
             expected_version=1,
-            decision=DECISION,
+            reason=REASON,
+            actor=approver,
             context=context("r"),
         )
     assert _counts(engine) == counts
@@ -173,15 +198,22 @@ def test_stale_expected_version_changes_nothing(
 
 
 def test_rejected_domain_command_does_not_consume_the_key(
-    engine: Engine, service: WorkflowService, seed: Seed
+    engine: Engine,
+    service: WorkflowService,
+    reconciliation_service: ReconciliationService,
+    approver: Principal,
+    seed: Seed,
 ) -> None:
     """Failed attempts are not cached; the key can carry a corrected request."""
+    snapshot_id = _matched(reconciliation_service, seed.workflow_id)
     counts = _counts(engine)
     with pytest.raises(DomainValidationError) as error:
         service.approve(
             seed.workflow_id,
             expected_version=1,
-            decision=DECISION,
+            reconciliation_snapshot_id=snapshot_id,
+            reason=REASON,
+            actor=approver,
             context=context("x"),
         )
     assert error.value.code == "invalid_transition"
@@ -200,6 +232,7 @@ def test_start_rejects_reused_ids_and_unknown_versions(
             invoice_version_id=seed.invoice_version.version_id,
             purchase_order_version_id=None,
             policy_version_id=seed.policy_version.version_id,
+            business_unit=UNIT,
             context=context("start-2"),
         )
     with pytest.raises(NotFoundError):
@@ -208,6 +241,7 @@ def test_start_rejects_reused_ids_and_unknown_versions(
             invoice_version_id=uuid4(),
             purchase_order_version_id=None,
             policy_version_id=seed.policy_version.version_id,
+            business_unit=UNIT,
             context=context("start-3"),
         )
     with pytest.raises(NotFoundError):
@@ -292,12 +326,16 @@ def test_old_snapshot_keeps_original_inputs_after_order_and_policy_change(
 
 
 def test_reject_keeps_the_latest_snapshot_reference(
-    service: WorkflowService, seed: Seed
+    service: WorkflowService, approver: Principal, seed: Seed
 ) -> None:
     """A rejection after a check still shows which result the reviewer saw."""
     checked = service.check(seed.workflow_id, expected_version=1, context=context("c"))
     service.reject(
-        seed.workflow_id, expected_version=2, decision=DECISION, context=context("r")
+        seed.workflow_id,
+        expected_version=2,
+        reason=REASON,
+        actor=approver,
+        context=context("r"),
     )
     stored = service.get_workflow(seed.workflow_id)
     assert stored.workflow.state == WorkflowState.REJECTED

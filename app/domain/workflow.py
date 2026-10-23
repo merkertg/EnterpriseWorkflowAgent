@@ -20,7 +20,7 @@ class WorkflowState(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class HumanDecision:
-    """Caller-supplied decision metadata; roles and verified identity arrive later."""
+    """Who decided and why; the application fills in an authorized employee."""
 
     actor_id: str
     reason: str

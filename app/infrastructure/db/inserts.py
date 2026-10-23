@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.application.errors import (
     ConcurrentWriteError,
     IdempotencyKeyClaimedError,
+    UserExistsError,
     WorkflowAlreadyExistsError,
 )
 
@@ -18,6 +19,7 @@ _CONCURRENT_UNIQUES = {
     "uq_document_extractions_document_id_extractor",
     "uq_reconciliation_rule_versions_rules_id_version_no",
     "uq_reconciliation_snapshots_workflow_id_inputs_hash",
+    "uq_api_tokens_token_hash",
 }
 
 
@@ -45,4 +47,6 @@ def insert_rows(session: Session, *rows: object) -> None:
             raise WorkflowAlreadyExistsError(
                 "Workflow ID is already in use."
             ) from error
+        if name == "pk_users":
+            raise UserExistsError("User ID is already in use.") from error
         raise

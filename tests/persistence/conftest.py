@@ -15,9 +15,11 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import Engine, text
 
+from app.application.access import Principal
 from app.application.documents import DocumentService
 from app.application.ports import CommandContext, CommandResult, VersionRef
 from app.application.reconciliation import ReconciliationService
+from app.application.users import UserService
 from app.application.workflows import WorkflowService
 from app.demo import build_demo_documents
 from app.domain.models import Invoice, PurchaseOrder
@@ -27,12 +29,15 @@ from app.domain.rules import ValidationPolicy
 from app.infrastructure.db.session import (
     build_document_service,
     build_reconciliation_service,
+    build_user_service,
     build_workflow_service,
     create_database_engine,
     require_test_database_url,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
+# Every test workflow belongs to this fictional business unit.
+UNIT = "UNIT-A"
 # Fictional USD/EUR tolerances shared by reconciliation tests.
 USD_RULES = ReconciliationRules(
     "test-rules",
@@ -45,6 +50,9 @@ USD_RULES = ReconciliationRules(
     ),
 )
 TABLES = (
+    "outbox_events",
+    "api_tokens",
+    "users",
     "reconciliation_snapshots",
     "reconciliation_currency_rules",
     "reconciliation_rule_versions",
@@ -123,6 +131,27 @@ def reconciliation_service(engine: Engine) -> ReconciliationService:
     return build_reconciliation_service(engine)
 
 
+@pytest.fixture
+def user_service(engine: Engine) -> UserService:
+    """Employee and token management over the same test database."""
+    return build_user_service(engine)
+
+
+def employee(
+    users: UserService, user_id: str, *roles: str, units: tuple[str, ...] = (UNIT,)
+) -> Principal:
+    """Create a fictional employee and return their current rights."""
+    return users.create_user(
+        user_id, display_name=f"Fictional {user_id}", roles=roles, units=units
+    ).principal()
+
+
+@pytest.fixture
+def approver(user_service: UserService) -> Principal:
+    """An approver in UNIT-A who did not start any test workflow."""
+    return employee(user_service, "approver-1", "approver")
+
+
 def context(key: str) -> CommandContext:
     """Build test command metadata with a caller-chosen idempotency key."""
     return CommandContext(key, "pytest")
@@ -160,6 +189,7 @@ def seed(service: WorkflowService) -> Seed:
         invoice_version_id=invoice_version.version_id,
         purchase_order_version_id=order_version.version_id,
         policy_version_id=policy_version.version_id,
+        business_unit=UNIT,
         context=context("start-1"),
     )
     return Seed(

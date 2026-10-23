@@ -1,19 +1,33 @@
 """Persistent workflow use cases with versions, audit and idempotent commands.
 
 Each command runs in one unit of work: the idempotency record, an optional
-validation snapshot, the workflow update and its audit event commit together or
-not at all. Domain functions still decide every state transition.
+validation snapshot, the workflow update, an optional outbox event and the
+audit event commit together or not at all. Domain functions still decide every
+state transition.
+
+Commands accept an optional ``actor``. With one, the user is reloaded and
+authorized inside the same transaction, so a role removed or an account
+deactivated a moment earlier is honoured. Internal tools call without an actor.
+Decisions always require one and must cite a fresh, matched reconciliation.
 """
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from enum import StrEnum
+from typing import Any
 from uuid import UUID, uuid4
 
+from app.application.access import Permission, Principal, validate_unit
 from app.application.errors import (
     ConcurrentWriteError,
     IdempotencyKeyClaimedError,
     IdempotencyKeyReusedError,
+    MissingPermissionError,
     NotFoundError,
+    ReconciliationNotForWorkflowError,
+    ReconciliationNotMatchedError,
+    SelfApprovalError,
+    StaleReconciliationError,
     VersionConflictError,
     WorkflowAlreadyExistsError,
 )
@@ -23,6 +37,8 @@ from app.application.ports import (
     CommandName,
     CommandResult,
     IdempotencyRecord,
+    OutboxEvent,
+    OutboxEventType,
     StoredWorkflow,
     UnitOfWork,
     ValidationSnapshot,
@@ -31,9 +47,19 @@ from app.application.ports import (
     WorkflowRepository,
     require_positive_version,
 )
+from app.application.reconciliation import compute_freshness
+from app.application.users import current_principal
+from app.application.versions import (
+    append_invoice_version,
+    append_version,
+    invoice_number_key,
+    purchase_order_key,
+    rules_key,
+)
 from app.domain.content_hash import CanonicalValue, content_hash, sha256_hex
 from app.domain.errors import DomainValidationError
 from app.domain.models import Invoice, PurchaseOrder, validate_text
+from app.domain.reconciliation import ReconciliationStatus
 from app.domain.rules import ValidationPolicy
 from app.domain.workflow import (
     HumanDecision,
@@ -44,14 +70,25 @@ from app.domain.workflow import (
     revise_workflow,
 )
 
+
+class ReferenceKind(StrEnum):
+    """Reference data recorded by administrators and selected by version ID."""
+
+    PURCHASE_ORDER = "purchase_order"
+    POLICY = "policy"
+    RECONCILIATION_RULES = "reconciliation_rules"
+
+
 # A version-number race is retried a few times; a lost idempotency claim once.
 _VERSION_ATTEMPTS = 3
 _COMMAND_ATTEMPTS = 2
 
+type Operation = Callable[[UnitOfWork], "_Change"]
+
 
 @dataclass(frozen=True, slots=True)
 class _Change:
-    """A computed domain result and the input versions it must be stored with."""
+    """A computed domain result and everything that must be stored with it."""
 
     previous: StoredWorkflow | None
     workflow: Workflow
@@ -59,6 +96,11 @@ class _Change:
     purchase_order_version: VersionRef | None
     policy_version: VersionRef
     records_snapshot: bool = False
+    business_unit: str | None = None
+    created_by: str | None = None
+    actor_id: str | None = None
+    outbox: OutboxEvent | None = None
+    decision_reconciliation_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,35 +168,11 @@ def _version_request(
     }
 
 
-def append_version(
-    business_id: str,
-    digest: str,
-    current: VersionRef | None,
-    add: Callable[[VersionRef], None],
-) -> VersionRef:
-    """Inside a transaction: reuse identical latest content or add the next number."""
-    if current is not None and current.content_hash == digest:
-        return current
-    ref = VersionRef(
-        version_id=uuid4(),
-        business_id=business_id,
-        version_no=1 if current is None else current.version_no + 1,
-        content_hash=digest,
-    )
-    add(ref)
-    return ref
-
-
-def append_invoice_version(
-    repository: WorkflowRepository, invoice: Invoice
-) -> VersionRef:
-    """Record invoice content in the caller's transaction; documents reuse this."""
-    return append_version(
-        invoice.invoice_id,
-        content_hash(invoice),
-        repository.latest_invoice_version(invoice.invoice_id),
-        lambda ref: repository.add_invoice_version(Versioned(ref, invoice)),
-    )
+def _actor_id(actor: Principal | None) -> str | None:
+    """Validate an optional actor and return its ID for request fingerprints."""
+    if actor is not None:
+        _require_type(actor, Principal, "actor")
+    return None if actor is None else actor.user_id
 
 
 class WorkflowService:
@@ -174,11 +192,18 @@ class WorkflowService:
         )
 
     def record_purchase_order(self, purchase_order: PurchaseOrder) -> VersionRef:
-        """Store purchase order content; a change creates the next version."""
+        """Store purchase order content; a change creates the next version.
+
+        The order's lock key serializes this with approvals that check whether
+        their reconciliation still uses the latest order version.
+        """
         _require_type(purchase_order, PurchaseOrder, "purchase_order")
         business_id = purchase_order.purchase_order_id
-        return self._in_new_transaction(
-            lambda repository: append_version(
+
+        def append(repository: WorkflowRepository) -> VersionRef:
+            """Lock the order key, then append a version if content changed."""
+            repository.lock_keys((purchase_order_key(business_id),))
+            return append_version(
                 business_id,
                 content_hash(purchase_order),
                 repository.latest_purchase_order_version(business_id),
@@ -186,7 +211,8 @@ class WorkflowService:
                     Versioned(ref, purchase_order)
                 ),
             )
-        )
+
+        return self._in_new_transaction(append)
 
     def record_policy(self, policy: ValidationPolicy) -> VersionRef:
         """Store validation policy data; a changed allowlist is a new version."""
@@ -227,30 +253,47 @@ class WorkflowService:
         invoice_version_id: UUID,
         purchase_order_version_id: UUID | None,
         policy_version_id: UUID,
+        business_unit: str,
         context: CommandContext,
+        actor: Principal | None = None,
     ) -> CommandResult:
-        """Create a received workflow pinned to explicitly selected versions."""
+        """Create a received workflow in a business unit with pinned versions."""
         workflow_id = validate_text(workflow_id, "workflow_id")
+        business_unit = validate_unit(business_unit)
         request = {
             "workflow_id": workflow_id,
+            "business_unit": business_unit,
+            "actor": _actor_id(actor),
             **_version_request(
                 invoice_version_id, purchase_order_version_id, policy_version_id
             ),
         }
 
-        def operation(repository: WorkflowRepository) -> _Change:
-            """Refuse a reused ID, then let the domain validate the new workflow."""
-            if repository.get_workflow(workflow_id) is not None:
-                raise WorkflowAlreadyExistsError("Workflow ID is already in use.")
+        def operation(unit: UnitOfWork) -> _Change:
+            """Authorize, lock the invoice number, then let the domain validate."""
+            principal = current_principal(unit, actor, Permission.SUBMIT, None)
+            # The caller names the unit, so a foreign one is a refusal, not 404.
+            if principal is not None and business_unit not in principal.units:
+                raise MissingPermissionError(
+                    "You cannot start workflows in this business unit."
+                )
+            repository = unit.repository
             inputs = _load_inputs(
                 repository,
                 invoice_version_id,
                 purchase_order_version_id,
                 policy_version_id,
             )
+            invoice = inputs.invoice.value
+            # Serializes with approvals that check this invoice for duplicates.
+            repository.lock_keys(
+                (invoice_number_key(invoice.supplier_id, invoice.invoice_id),)
+            )
+            if repository.get_workflow(workflow_id) is not None:
+                raise WorkflowAlreadyExistsError("Workflow ID is already in use.")
             workflow = Workflow(
                 workflow_id,
-                inputs.invoice.value,
+                invoice,
                 None if inputs.purchase_order is None else inputs.purchase_order.value,
                 inputs.policy.value,
             )
@@ -262,23 +305,42 @@ class WorkflowService:
                 if inputs.purchase_order is None
                 else inputs.purchase_order.ref,
                 policy_version=inputs.policy.ref,
+                business_unit=business_unit,
+                created_by=None if principal is None else principal.user_id,
+                actor_id=None if principal is None else principal.user_id,
             )
 
         return self._execute(CommandName.START, request, context, operation)
 
     def check(
-        self, workflow_id: str, *, expected_version: int, context: CommandContext
+        self,
+        workflow_id: str,
+        *,
+        expected_version: int,
+        context: CommandContext,
+        actor: Principal | None = None,
     ) -> CommandResult:
         """Evaluate the pinned inputs and store an immutable validation snapshot."""
+
+        def compute(unit: UnitOfWork, current: StoredWorkflow) -> _Change:
+            """Authorize, then run the domain check."""
+            principal = current_principal(
+                unit, actor, Permission.SUBMIT, current.business_unit
+            )
+            return _same_inputs(
+                current,
+                check_workflow(current.workflow),
+                records_snapshot=True,
+                actor_id=None if principal is None else principal.user_id,
+            )
+
         return self._transition(
             CommandName.CHECK,
             workflow_id,
             expected_version,
-            {},
+            {"actor": _actor_id(actor)},
             context,
-            lambda _repository, current: _same_inputs(
-                current, check_workflow(current.workflow), records_snapshot=True
-            ),
+            compute,
         )
 
     def approve(
@@ -286,20 +348,95 @@ class WorkflowService:
         workflow_id: str,
         *,
         expected_version: int,
-        decision: HumanDecision,
+        reconciliation_snapshot_id: UUID,
+        reason: str,
+        actor: Principal,
         context: CommandContext,
     ) -> CommandResult:
-        """Record a caller-supplied decision after a fresh clean check."""
-        _require_type(decision, HumanDecision, "decision")
+        """Approve on a fresh matched reconciliation, as an authorized employee.
+
+        Inside one transaction: the approver's current rights, the four-eyes
+        rule, the snapshot's workflow and status, locks on the order, rules and
+        invoice-number keys, freshness against current versions, the domain
+        approval, the outbox event and the audit event.
+        """
+        _require_type(actor, Principal, "actor")
+        _require_type(reconciliation_snapshot_id, UUID, "reconciliation_snapshot_id")
+        reason = validate_text(reason, "reason", 2000)
+
+        def compute(unit: UnitOfWork, current: StoredWorkflow) -> _Change:
+            """Run every approval check after the locks are held."""
+            principal = current_principal(
+                unit, actor, Permission.DECIDE, current.business_unit
+            )
+            assert principal is not None
+            if principal.user_id == current.created_by:
+                raise SelfApprovalError(
+                    "The employee who started a workflow cannot approve it."
+                )
+            snapshot = _found(
+                unit.reconciliations.get_snapshot(reconciliation_snapshot_id),
+                "Reconciliation snapshot",
+            )
+            if snapshot.workflow_id != current.workflow.workflow_id:
+                raise ReconciliationNotForWorkflowError(
+                    "The reconciliation snapshot belongs to another workflow."
+                )
+            invoice = current.workflow.invoice
+            order = snapshot.inputs.purchase_order_version
+            unit.repository.lock_keys(
+                (
+                    invoice_number_key(invoice.supplier_id, invoice.invoice_id),
+                    purchase_order_key(
+                        invoice.purchase_order_id
+                        if order is None
+                        else order.business_id
+                    ),
+                    rules_key(snapshot.inputs.rules_version.business_id),
+                )
+            )
+            freshness = compute_freshness(unit, snapshot)
+            if not freshness.is_current:
+                reasons = tuple(reason.value for reason in freshness.reasons)
+                raise StaleReconciliationError(
+                    "The reconciliation is stale: " + ", ".join(reasons) + ".",
+                    reasons,
+                )
+            if snapshot.result.status is not ReconciliationStatus.MATCHED:
+                raise ReconciliationNotMatchedError(
+                    "Approval needs a reconciliation without discrepancies."
+                )
+            workflow = approve_workflow(
+                current.workflow, HumanDecision(principal.user_id, reason)
+            )
+            outbox = _outbox_event(
+                OutboxEventType.INVOICE_APPROVED,
+                current,
+                principal,
+                {
+                    "reconciliation_snapshot_id": str(snapshot.snapshot_id),
+                    "reconciliation_inputs_hash": snapshot.inputs_hash,
+                },
+            )
+            return _same_inputs(
+                current,
+                workflow,
+                actor_id=principal.user_id,
+                outbox=outbox,
+                decision_reconciliation_id=snapshot.snapshot_id,
+            )
+
         return self._transition(
             CommandName.APPROVE,
             workflow_id,
             expected_version,
-            {"actor_id": decision.actor_id, "reason": decision.reason},
+            {
+                "actor": actor.user_id,
+                "reconciliation_snapshot_id": str(reconciliation_snapshot_id),
+                "reason": reason,
+            },
             context,
-            lambda _repository, current: _same_inputs(
-                current, approve_workflow(current.workflow, decision)
-            ),
+            compute,
         )
 
     def reject(
@@ -307,20 +444,37 @@ class WorkflowService:
         workflow_id: str,
         *,
         expected_version: int,
-        decision: HumanDecision,
+        reason: str,
+        actor: Principal,
         context: CommandContext,
     ) -> CommandResult:
-        """Record a reasoned rejection in any open state."""
-        _require_type(decision, HumanDecision, "decision")
+        """Reject in any open state, as an authorized employee, with an outbox event."""
+        _require_type(actor, Principal, "actor")
+        reason = validate_text(reason, "reason", 2000)
+
+        def compute(unit: UnitOfWork, current: StoredWorkflow) -> _Change:
+            """Authorize, then record the rejection and its outbox event."""
+            principal = current_principal(
+                unit, actor, Permission.DECIDE, current.business_unit
+            )
+            assert principal is not None
+            workflow = reject_workflow(
+                current.workflow, HumanDecision(principal.user_id, reason)
+            )
+            outbox = _outbox_event(
+                OutboxEventType.INVOICE_REJECTED, current, principal, {}
+            )
+            return _same_inputs(
+                current, workflow, actor_id=principal.user_id, outbox=outbox
+            )
+
         return self._transition(
             CommandName.REJECT,
             workflow_id,
             expected_version,
-            {"actor_id": decision.actor_id, "reason": decision.reason},
+            {"actor": actor.user_id, "reason": reason},
             context,
-            lambda _repository, current: _same_inputs(
-                current, reject_workflow(current.workflow, decision)
-            ),
+            compute,
         )
 
     def revise(
@@ -332,18 +486,23 @@ class WorkflowService:
         purchase_order_version_id: UUID | None,
         policy_version_id: UUID,
         context: CommandContext,
+        actor: Principal | None = None,
     ) -> CommandResult:
         """Pin other input versions; older snapshots keep their original references."""
-        request = _version_request(
-            invoice_version_id, purchase_order_version_id, policy_version_id
-        )
+        request = {
+            "actor": _actor_id(actor),
+            **_version_request(
+                invoice_version_id, purchase_order_version_id, policy_version_id
+            ),
+        }
 
-        def operation(
-            repository: WorkflowRepository, current: StoredWorkflow
-        ) -> _Change:
-            """Load the new versions and reset the workflow through the domain."""
+        def compute(unit: UnitOfWork, current: StoredWorkflow) -> _Change:
+            """Authorize, load the new versions and reset through the domain."""
+            principal = current_principal(
+                unit, actor, Permission.SUBMIT, current.business_unit
+            )
             inputs = _load_inputs(
-                repository,
+                unit.repository,
                 invoice_version_id,
                 purchase_order_version_id,
                 policy_version_id,
@@ -362,6 +521,7 @@ class WorkflowService:
                 if inputs.purchase_order is None
                 else inputs.purchase_order.ref,
                 policy_version=inputs.policy.ref,
+                actor_id=None if principal is None else principal.user_id,
             )
 
         return self._transition(
@@ -370,16 +530,18 @@ class WorkflowService:
             expected_version,
             request,
             context,
-            operation,
+            compute,
         )
 
     # Queries ------------------------------------------------------------------
 
-    def get_workflow(self, workflow_id: str) -> StoredWorkflow:
-        """Return the current stored workflow and its pinned version references."""
+    def get_workflow(
+        self, workflow_id: str, *, actor: Principal | None = None
+    ) -> StoredWorkflow:
+        """Return the current workflow; an actor must see its business unit."""
         workflow_id = validate_text(workflow_id, "workflow_id")
         with self._unit_of_work() as unit:
-            return _found(unit.repository.get_workflow(workflow_id), "Workflow")
+            return _visible(unit, workflow_id, actor)
 
     def get_snapshot(self, snapshot_id: UUID) -> ValidationSnapshot:
         """Return a historical check result with the exact inputs it used."""
@@ -398,12 +560,48 @@ class WorkflowService:
                 "Purchase order version",
             )
 
-    def audit_trail(self, workflow_id: str) -> tuple[AuditEvent, ...]:
-        """Return all audit events for an existing workflow in commit order."""
+    def latest_reference(
+        self,
+        kind: ReferenceKind,
+        business_id: str,
+        *,
+        actor: Principal | None = None,
+    ) -> VersionRef:
+        """Return the latest version of an order, policy or rule set.
+
+        Reference data is shared by all business units; viewing it needs the
+        view permission only.
+        """
+        _require_type(kind, ReferenceKind, "kind")
+        business_id = validate_text(business_id, "business_id")
+        with self._unit_of_work() as unit:
+            current_principal(unit, actor, Permission.VIEW, None)
+            repository = unit.repository
+            if kind is ReferenceKind.PURCHASE_ORDER:
+                ref = repository.latest_purchase_order_version(business_id)
+            elif kind is ReferenceKind.POLICY:
+                ref = repository.latest_policy_version(business_id)
+            else:
+                ref = unit.reconciliations.latest_rules_version(business_id)
+        return _found(ref, "Reference version")
+
+    def audit_trail(
+        self, workflow_id: str, *, actor: Principal | None = None
+    ) -> tuple[AuditEvent, ...]:
+        """Return all audit events for a visible workflow in commit order."""
         workflow_id = validate_text(workflow_id, "workflow_id")
         with self._unit_of_work() as unit:
-            _found(unit.repository.get_workflow(workflow_id), "Workflow")
+            _visible(unit, workflow_id, actor)
             return unit.repository.list_audit_events(workflow_id)
+
+    def outbox_events(
+        self, workflow_id: str, *, actor: Principal | None = None
+    ) -> tuple[OutboxEvent, ...]:
+        """Return the outbox events written by a visible workflow's decisions."""
+        workflow_id = validate_text(workflow_id, "workflow_id")
+        with self._unit_of_work() as unit:
+            _visible(unit, workflow_id, actor)
+            return unit.repository.list_outbox_events(workflow_id)
 
     # Shared command machinery -------------------------------------------------
 
@@ -414,7 +612,7 @@ class WorkflowService:
         expected_version: int,
         arguments: dict[str, CanonicalValue],
         context: CommandContext,
-        compute: Callable[[WorkflowRepository, StoredWorkflow], _Change],
+        compute: Callable[[UnitOfWork, StoredWorkflow], _Change],
     ) -> CommandResult:
         """Load a workflow, check the caller's version and compute the change."""
         workflow_id = validate_text(workflow_id, "workflow_id")
@@ -425,15 +623,15 @@ class WorkflowService:
             **arguments,
         }
 
-        def operation(repository: WorkflowRepository) -> _Change:
+        def operation(unit: UnitOfWork) -> _Change:
             """Reject stale input before the domain sees an unexpected state."""
-            current = _found(repository.get_workflow(workflow_id), "Workflow")
+            current = _found(unit.repository.get_workflow(workflow_id), "Workflow")
             if current.version != expected_version:
                 raise VersionConflictError(
                     f"Expected version {expected_version}, "
                     f"current version is {current.version}."
                 )
-            return compute(repository, current)
+            return compute(unit, current)
 
         return self._execute(command, request, context, operation)
 
@@ -442,7 +640,7 @@ class WorkflowService:
         command: CommandName,
         arguments: dict[str, CanonicalValue],
         context: CommandContext,
-        operation: Callable[[WorkflowRepository], _Change],
+        operation: Operation,
     ) -> CommandResult:
         """Replay a known key or apply a new change in one transaction."""
         _require_type(context, CommandContext, "context")
@@ -450,15 +648,14 @@ class WorkflowService:
         for _attempt in range(_COMMAND_ATTEMPTS):
             try:
                 with self._unit_of_work() as unit:
-                    repository = unit.repository
-                    existing = repository.get_idempotency_record(
+                    existing = unit.repository.get_idempotency_record(
                         context.idempotency_key
                     )
                     if existing is not None:
                         return _replay(existing, request_hash)
-                    change = operation(repository)
+                    change = operation(unit)
                     result = _persist(
-                        repository, command, change, context, request_hash
+                        unit.repository, command, change, context, request_hash
                     )
                     unit.commit()
                     return result
@@ -481,8 +678,53 @@ class WorkflowService:
         return None if existing is None else _replay(existing, request_hash)
 
 
+def _visible(
+    unit: UnitOfWork, workflow_id: str, actor: Principal | None
+) -> StoredWorkflow:
+    """Load a workflow the actor may view; another unit's work is not found."""
+    stored = _found(unit.repository.get_workflow(workflow_id), "Workflow")
+    current_principal(unit, actor, Permission.VIEW, stored.business_unit)
+    return stored
+
+
+def _outbox_event(
+    event_type: OutboxEventType,
+    current: StoredWorkflow,
+    principal: Principal,
+    extra: dict[str, Any],
+) -> OutboxEvent:
+    """Describe a decision for the next process step with IDs and hashes only."""
+    version = current.version + 1
+    order = current.purchase_order_version
+    return OutboxEvent(
+        event_id=uuid4(),
+        event_type=event_type,
+        workflow_id=current.workflow.workflow_id,
+        workflow_version=version,
+        payload={
+            "event_type": event_type.value,
+            "workflow_id": current.workflow.workflow_id,
+            "workflow_version": version,
+            "business_unit": current.business_unit,
+            "decided_by": principal.user_id,
+            "invoice_version_id": str(current.invoice_version.version_id),
+            "invoice_content_hash": current.invoice_version.content_hash,
+            "purchase_order_version_id": None
+            if order is None
+            else str(order.version_id),
+            **extra,
+        },
+    )
+
+
 def _same_inputs(
-    current: StoredWorkflow, workflow: Workflow, *, records_snapshot: bool = False
+    current: StoredWorkflow,
+    workflow: Workflow,
+    *,
+    records_snapshot: bool = False,
+    actor_id: str | None = None,
+    outbox: OutboxEvent | None = None,
+    decision_reconciliation_id: UUID | None = None,
 ) -> _Change:
     """Describe a transition that keeps the currently pinned input versions."""
     return _Change(
@@ -492,6 +734,9 @@ def _same_inputs(
         purchase_order_version=current.purchase_order_version,
         policy_version=current.policy_version,
         records_snapshot=records_snapshot,
+        actor_id=actor_id,
+        outbox=outbox,
+        decision_reconciliation_id=decision_reconciliation_id,
     )
 
 
@@ -511,7 +756,7 @@ def _persist(
     context: CommandContext,
     request_hash: str,
 ) -> CommandResult:
-    """Write key claim, snapshot, workflow and audit event in dependency order."""
+    """Write key, snapshot, workflow, outbox and audit in dependency order."""
     previous = change.previous
     workflow = change.workflow
     version = 1 if previous is None else previous.version + 1
@@ -551,6 +796,13 @@ def _persist(
     )
     if snapshot is not None:
         repository.add_snapshot(snapshot)
+    business_unit = change.business_unit or (
+        None if previous is None else previous.business_unit
+    )
+    if business_unit is None:
+        raise DomainValidationError(
+            "missing_unit", "business_unit", "A workflow needs a business unit."
+        )
     stored = StoredWorkflow(
         workflow=workflow,
         version=version,
@@ -558,11 +810,17 @@ def _persist(
         purchase_order_version=change.purchase_order_version,
         policy_version=change.policy_version,
         last_snapshot_id=last_snapshot_id,
+        business_unit=business_unit,
+        created_by=change.created_by if previous is None else previous.created_by,
+        decision_reconciliation_id=change.decision_reconciliation_id
+        or (None if previous is None else previous.decision_reconciliation_id),
     )
     if previous is None:
         repository.add_workflow(stored)
     else:
         repository.update_workflow(stored, previous.version)
+    if change.outbox is not None:
+        repository.add_outbox_event(change.outbox)
     issues = () if workflow.last_check is None else workflow.last_check.issues
     repository.add_audit_event(
         AuditEvent(
@@ -580,9 +838,11 @@ def _persist(
             issue_codes=tuple(issue.code.value for issue in issues)
             if snapshot is not None
             else (),
-            actor_id=None if workflow.decision is None else workflow.decision.actor_id,
+            actor_id=change.actor_id,
             source=context.source,
             idempotency_key=context.idempotency_key,
+            reconciliation_snapshot_id=change.decision_reconciliation_id,
+            outbox_event_id=None if change.outbox is None else change.outbox.event_id,
         )
     )
     return result

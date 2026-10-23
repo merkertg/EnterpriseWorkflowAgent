@@ -24,16 +24,17 @@ from app.domain.models import LineItem, PurchaseOrder
 from app.domain.money import Currency, Money
 from app.domain.reconciliation import CurrencyRule, ReconciliationRules
 from app.domain.rules import ValidationPolicy
-from app.domain.workflow import HumanDecision
 from app.infrastructure.db.session import (
     build_document_service,
     build_reconciliation_service,
+    build_user_service,
     build_workflow_service,
     create_database_engine,
 )
 from app.samples import invoice_text
 
 _SOURCE = "reconciliation-demo"
+_UNIT = "DEMO-UNIT"
 _SEAL = ("DEMO-SEAL", "Fictional seal kit")
 _FILTER = ("DEMO-FILTER", "Fictional filter")
 
@@ -147,6 +148,7 @@ def run_reconciliation_demo(engine: Engine) -> dict[str, object]:
             invoice_version_id=version.version_id,
             purchase_order_version_id=order_v1.version_id,
             policy_version_id=policy.version_id,
+            business_unit=_UNIT,
             context=context(f"{name}:start"),
         )
         workflows.check(
@@ -200,10 +202,22 @@ def run_reconciliation_demo(engine: Engine) -> dict[str, object]:
     stale_a = describe_report(service.report(snapshot_a.snapshot_id))
 
     # Resolve: reject the duplicate, pin A to order v2, re-check, re-reconcile.
+    # Since Stage 06 a decision needs a registered employee.
+    reviewer = (
+        build_user_service(engine)
+        .create_user(
+            f"demo-reviewer-r{run.lower()}",
+            display_name="Fictional demo reviewer",
+            roles=("approver",),
+            units=(_UNIT,),
+        )
+        .principal()
+    )
     workflows.reject(
         duplicate,
         expected_version=2,
-        decision=HumanDecision("demo-reviewer-1", "Duplicate submission"),
+        reason="Duplicate submission",
+        actor=reviewer,
         context=context("D:reject"),
     )
     workflows.revise(

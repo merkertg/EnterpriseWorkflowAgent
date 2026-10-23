@@ -6,8 +6,9 @@
 
 Stage 04 accepts UTF-8 text and PDFs with a text layer, extracts invoice
 fields with a deterministic parser and records the exact source span of every
-value. No HTTP endpoint is added; uploads over HTTP arrive with authorization
-in Stage 06.
+value. Since Stage 06 documents can also be uploaded with
+`POST /documents` by a user with the `submit` permission; see
+[API usage](usage.md).
 
 ## Commands
 
@@ -111,6 +112,6 @@ Stage 05 reconciliation cites these evidence spans for each discrepancy; see
 ## Limits
 
 Text-layer PDFs and the training label format only; no OCR; ASCII-only sample
-PDF writer; no manual correction of `needs_review` fields yet; no HTTP upload
-until Stage 06; the worker has a time limit but no memory limit. See
+PDF writer; no manual correction of `needs_review` fields yet; uploaded documents are
+not tied to a business unit; the worker has a time limit but no memory limit. See
 [testing](testing.md) for checks.

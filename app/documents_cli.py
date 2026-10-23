@@ -164,6 +164,7 @@ def run_documents_demo(service: DocumentService, engine: Engine) -> dict[str, ob
         invoice_version_id=invoice_version.version_id,
         purchase_order_version_id=order_version.version_id,
         policy_version_id=policy_version.version_id,
+        business_unit="DEMO-UNIT",
         context=CommandContext(f"{run_id}:start", "documents-demo"),
     )
     checked = workflows.check(

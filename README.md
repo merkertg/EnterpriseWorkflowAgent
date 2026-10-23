@@ -6,8 +6,8 @@ document, extract fields with source evidence, apply corporate rules, show
 discrepancies, obtain an employee's decision and record the next process step.
 All examples will use fictional data.
 
-**Current scope: Stages 01–05 — API foundation, domain, PostgreSQL storage,
-document intake and deterministic reconciliation.**
+**Current scope: Stages 01–06 — API foundation, domain, PostgreSQL storage,
+document intake, deterministic reconciliation and employee decisions.**
 The repository contains a FastAPI liveness endpoint, validated settings, exact
 money and purchasing models, seven basic validation reasons and an immutable
 workflow. Stage 03 persists it in PostgreSQL through Alembic migrations, with
@@ -18,11 +18,14 @@ records the exact page and character span behind every value; incomplete
 extractions wait for review instead of producing an invoice. Stage 05
 reconciles invoice lines with the purchase order under versioned tolerance
 rules and stores reproducible snapshots that become stale when the order or
-rules change. Isolated tests,
+rules change. Stage 06 adds employees with bearer tokens, roles and business
+units, a business HTTP API with document upload, and approval that must cite a
+fresh matched reconciliation snapshot, with four-eyes checking and an outbox
+event written in the same transaction. Isolated tests,
 PostgreSQL integration tests, Ruff, strict mypy, a locked environment and a
 GitHub Actions workflow cover this work. Actual results and unverified items are
-recorded in [verification](docs/VERIFICATION.md). Authenticated approvals,
-HTTP workflow and upload endpoints and an LLM are planned.
+recorded in [verification](docs/VERIFICATION.md). An AI agent, a user
+interface and outbox delivery are planned.
 
 The planned design is a modular monolith. Deterministic code calculates amounts,
 checks rules and controls state transitions. The AI assistant proposes fields and
@@ -30,13 +33,14 @@ explanations; authorized employees make approval decisions. The tutorial does no
 initiate payments or act on real corporate systems.
 
 **Visual guides:** [Russian PDF](docs/guide/enterprise-workflow-agent-guide.pdf)
-and [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf), 22 pages
-each, with diagrams for stages 01–05.
+and [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf), 29 pages
+each, with diagrams for stages 01–06.
 
 **По-русски:** основа API — [этап 01](docs/STAGE_01.md), предметная модель,
 правила и состояния — [этап 02](docs/STAGE_02.md), хранение, транзакции и
 аудит — [этап 03](docs/STAGE_03.md), документы и происхождение полей —
-[этап 04](docs/STAGE_04.md), сверка счёта с заказом — [этап 05](docs/STAGE_05.md).
+[этап 04](docs/STAGE_04.md), сверка счёта с заказом — [этап 05](docs/STAGE_05.md),
+решение сотрудника, роли и outbox — [этап 06](docs/STAGE_06.md).
 Все этапы и критерии готовности — в [дорожной карте](docs/ROADMAP.md).
 
 ## Quickstart
@@ -63,11 +67,15 @@ Default response:
 ```
 
 Open [Swagger UI](http://127.0.0.1:8003/docs) or
-[OpenAPI JSON](http://127.0.0.1:8003/openapi.json). The API needs no database,
-model key or Docker. `/health` checks only that the API responds.
+[OpenAPI JSON](http://127.0.0.1:8003/openapi.json). `/health` and the API
+documentation need no database, model key or Docker; `/health` checks only
+that the API responds. Business endpoints need `DATABASE_URL` and a bearer
+token (see [Employee decisions and HTTP API](#employee-decisions-and-http-api))
+and otherwise answer `503`.
 
 Optional settings: `APP_NAME`, `APP_ENV` (`development`, `test`, `production`),
-`APP_DEBUG` (default `false`) and `DATABASE_URL` (Stage 03 commands only). They can come from an optional `.env`, based on
+`APP_DEBUG` (default `false`) and `DATABASE_URL` (Stage 03+ commands and the
+business API). They can come from an optional `.env`, based on
 [.env.example](.env.example), or process environment variables. Explicit factory
 settings take priority, then environment variables, `.env`, and code defaults.
 `APP_ENV=production` is a validated label; it does not configure production
@@ -88,8 +96,9 @@ The offline demo prints three fictional outcomes as JSON:
 - A missing purchase order produces `missing_purchase_order` and requires review.
 
 Amounts remain decimal strings. No files, database, credentials or web server are
-needed. A caller-provided `HumanDecision` is educational metadata, not verified
-identity or authorization. The HTTP API still exposes only `/health`.
+needed. In this in-memory demo a `HumanDecision` is caller-provided metadata;
+stored decisions since Stage 06 come from an authenticated, authorized
+employee.
 
 Basic checks validate references, supplier, currency, self-total and an order
 total ceiling. Detailed SKU/quantity/price matching, taxes, tolerances and duplicate
@@ -115,9 +124,9 @@ still references PO version 1. Read a run back in a new process with
 `uv run --locked python -m app.persistence_demo show WORKFLOW_ID`.
 
 Each command commits its idempotency record, snapshot, workflow update and
-audit event in one transaction. `actor_id` and `source` are caller-declared, not
-authenticated. A newer PO version does not yet mark a pinned result stale; that
-is Stage 05/06 work. See [persistence](docs/instructions/persistence.md).
+audit event in one transaction. Since Stage 06 the demo registers a fictional
+approver for its decisions, and workflows belong to the unit `DEMO-UNIT`. See
+[persistence](docs/instructions/persistence.md).
 
 ## Documents and field provenance
 
@@ -157,9 +166,31 @@ rules, duplicates, header and currency differences, unknown lines,
 quantities, prices and totals. Each discrepancy shows expected and actual
 values, the rule applied and a quote from the source document. Snapshots pin
 every input version and hash, are reused for identical inputs, report
-staleness after newer order or rule versions, and recompute exactly. Approval
-does not yet require a fresh matched snapshot (Stage 06). See
+staleness after newer order or rule versions, and recompute exactly. Since
+Stage 06 approval requires a fresh matched snapshot. See
 [reconciliation](docs/instructions/reconciliation.md).
+
+## Employee decisions and HTTP API
+
+```bash
+uv run --locked python -m app.users_cli create demo-approver --name "Fictional approver" --role approver --unit DEMO-UNIT-A
+uv run --locked python -m app.users_cli token demo-approver
+uv run --locked python -m app.decisions_demo
+uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8003
+```
+
+Roles `viewer`, `clerk` and `approver` grant `view`, `submit`, `reconcile`
+and `decide` within the user's business units; another unit's workflow is
+`404`. Tokens are shown once and stored as SHA-256; revocation and
+deactivation apply to the next request. Services re-check the user inside each
+command's transaction. Approval cites a reconciliation snapshot and is refused
+for a missing role, another unit, the workflow's own starter, a stale version,
+a stale or unmatched snapshot, or a forbidden transition. Order, rule and
+duplicate writers wait on the same PostgreSQL advisory locks as approval. The
+decision, an `invoice.approved` or `invoice.rejected` outbox event and the
+audit event commit together; nothing delivers events yet (Stage 09). Commands
+need an `Idempotency-Key` header. See [decisions](docs/instructions/decisions.md)
+and [API usage](docs/instructions/usage.md).
 
 ## Stages
 
@@ -170,7 +201,7 @@ does not yet require a fresh matched snapshot (Stage 06). See
 | 03 | PostgreSQL, migrations, transactional audit and idempotency | Implemented; PostgreSQL verified locally |
 | 04 | Safe text/PDF ingestion and fields with provenance | Implemented; verified locally |
 | 05 | Deterministic invoice reconciliation and discrepancy reports | Implemented; verified locally |
-| 06 | Employee approvals, roles and transactional outbox | Planned |
+| 06 | Employee approvals, roles and transactional outbox | Implemented; verified locally |
 | 07 | Bounded AI tools, demo provider and optional real model | Planned |
 | 08 | Streamlit interface through the HTTP API | Planned |
 | 09 | Security, failure scenarios, evals and local sandbox event delivery | Planned |
@@ -209,9 +240,9 @@ not been verified.
 | Purpose | Source |
 | --- | --- |
 | Stage plan and completion criteria (RU) | [ROADMAP](docs/ROADMAP.md) |
-| Detailed learning guides (RU) | [STAGE 01](docs/STAGE_01.md), [STAGE 02](docs/STAGE_02.md), [STAGE 03](docs/STAGE_03.md), [STAGE 04](docs/STAGE_04.md), [STAGE 05](docs/STAGE_05.md) |
-| Short task instructions (EN) | [Quickstart](docs/instructions/quickstart.md), [API](docs/instructions/usage.md), [domain](docs/instructions/domain.md), [persistence](docs/instructions/persistence.md), [documents](docs/instructions/documents.md), [reconciliation](docs/instructions/reconciliation.md), [testing](docs/instructions/testing.md), [project structure](docs/instructions/project-structure.md) |
-| Design and decisions (EN) | [Approach](docs/APPROACH.md), [ADR 0001](docs/adr/0001-modular-monolith-and-tooling.md), [ADR 0002](docs/adr/0002-domain-rules-and-workflow.md), [ADR 0003](docs/adr/0003-postgresql-persistence-audit-idempotency.md), [ADR 0004](docs/adr/0004-document-intake-and-field-provenance.md), [ADR 0005](docs/adr/0005-deterministic-reconciliation.md) |
+| Detailed learning guides (RU) | [STAGE 01](docs/STAGE_01.md), [STAGE 02](docs/STAGE_02.md), [STAGE 03](docs/STAGE_03.md), [STAGE 04](docs/STAGE_04.md), [STAGE 05](docs/STAGE_05.md), [STAGE 06](docs/STAGE_06.md) |
+| Short task instructions (EN) | [Quickstart](docs/instructions/quickstart.md), [API](docs/instructions/usage.md), [domain](docs/instructions/domain.md), [persistence](docs/instructions/persistence.md), [documents](docs/instructions/documents.md), [reconciliation](docs/instructions/reconciliation.md), [decisions](docs/instructions/decisions.md), [testing](docs/instructions/testing.md), [project structure](docs/instructions/project-structure.md) |
+| Design and decisions (EN) | [Approach](docs/APPROACH.md), [ADR 0001](docs/adr/0001-modular-monolith-and-tooling.md), [ADR 0002](docs/adr/0002-domain-rules-and-workflow.md), [ADR 0003](docs/adr/0003-postgresql-persistence-audit-idempotency.md), [ADR 0004](docs/adr/0004-document-intake-and-field-provenance.md), [ADR 0005](docs/adr/0005-deterministic-reconciliation.md), [ADR 0006](docs/adr/0006-employee-decisions-and-outbox.md) |
 | CI explanation (RU) | [CI/CD](docs/CI_CD.md) |
 | Work completed and check evidence (RU) | [Development log](docs/DEVELOPMENT_LOG.md), [verification](docs/VERIFICATION.md) |
 | Visual PDF guides (RU and EN) | [Russian PDF](docs/guide/enterprise-workflow-agent-guide.pdf), [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf), [how they are built](docs/guide/README.md) |

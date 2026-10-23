@@ -22,7 +22,7 @@ real supplier or modify a production ERP system.
 
 ## Delivery strategy
 
-Stages 01–05 are implemented. Stage 01 establishes a small FastAPI service,
+Stages 01–06 are implemented. Stage 01 establishes a small FastAPI service,
 environment settings, tests, static checks and documentation. Stage 02 adds a
 standard-library domain with immutable purchasing models, exact money, seven
 basic rule findings and in-memory workflow transitions.
@@ -36,7 +36,11 @@ and is exercised by `uv run --locked python -m app.documents_cli demo`.
 Stage 05 reconciles invoice lines with the order under versioned tolerance
 rules ([ADR 0005](adr/0005-deterministic-reconciliation.md)), and
 `uv run --locked python -m app.reconciliation_cli demo` exercises it.
-The default local port is `8003`. The initial endpoint is `GET /health`; with
+Stage 06 adds token-authenticated employees with unit-scoped roles, the
+business HTTP API, approval on a fresh matched reconciliation and a
+transactional outbox ([ADR 0006](adr/0006-employee-decisions-and-outbox.md));
+`uv run --locked python -m app.decisions_demo` exercises it.
+The default local port is `8003`. The first endpoint is `GET /health`; with
 default settings it returns:
 
 ```json
@@ -67,10 +71,13 @@ app/
   main.py                 # Application creation and route registration
   config.py               # Validated environment settings
   api/
-    routes/health.py      # HTTP endpoint
-    schemas/health.py     # Response contract
+    dependencies.py       # Services, bearer authentication, Idempotency-Key
+    errors.py             # Stable error codes mapped to HTTP statuses
+    routes/health.py      # Liveness endpoint
+    routes/business.py    # Documents, workflows, reconciliations, decisions
+    schemas/              # Request and response contracts
   domain/                 # Money, documents, rules, transitions, content hashes
-  application/            # WorkflowService, records and persistence ports
+  application/            # Use cases, access rules, tokens and persistence ports
   infrastructure/db/      # SQLAlchemy tables, repositories, engine and unit of work
   infrastructure/documents/   # Text decoding and the isolated PDF worker
   infrastructure/extraction/  # Deterministic field extractor
@@ -79,6 +86,8 @@ app/
   samples.py              # Fictional text/PDF samples and a tiny PDF writer
   documents_cli.py        # Document intake, evidence and demo commands
   reconciliation_cli.py   # Reconciliation demo and snapshot reports
+  users_cli.py            # Employee accounts and API tokens
+  decisions_demo.py       # Fictional Stage 06 decision scenario
 migrations/               # Alembic environment and revisions
 tests/
 ```
@@ -92,7 +101,7 @@ their behavior is introduced:
 | `domain/` | Typed business objects, money, rules and allowed state transitions | Python and explicit domain types; no HTTP, database or model SDK |
 | `application/` | Use cases, authorization requirements and transaction orchestration | Domain and ports for persistence, extraction and events |
 | `infrastructure/` | SQLAlchemy repositories, PDF/text extraction and the deterministic field extractor (implemented); model providers and event delivery (planned) | Implements application ports |
-| `api/` | HTTP schemas, authentication context, request validation and error mapping | Application use cases |
+| `api/` | HTTP schemas, bearer authentication, request validation and error mapping (implemented in Stage 06) | Application use cases |
 
 The composition root wires adapters into use cases. Domain decisions must not
 depend on an HTTP handler, database session or LLM response format. Introduce
@@ -137,8 +146,8 @@ A workflow retains the exact immutable invoice, PO and policy used by its check.
 Contradictory states and stale or fabricated findings are rejected. Revision
 keeps the invoice identity, resets the state and discards the old check. These
 in-memory references are not persistent version IDs or cryptographic hashes.
-HumanDecision records caller-supplied metadata; authenticated identity and roles
-remain Stage 06 work.
+Since Stage 06 the application builds the HumanDecision from an authenticated
+employee whose role and business unit it has just checked.
 
 Stage 03 implements transactional persistence, an audit trail, optimistic
 concurrency and command idempotency ([ADR 0003](adr/0003-postgresql-persistence-audit-idempotency.md)).
@@ -156,15 +165,21 @@ of silently following the latest PO or rules; freshness is computed against
 the currently applicable versions, and stale snapshots are recomputed exactly
 from their own inputs.
 
-An employee's approval references one reconciliation snapshot. Immediately before
-the transition, the application verifies that its source, PO and policy versions
-and hashes still match the applicable inputs. This check and the approval share
-a transaction. Changed inputs require a new reconciliation and a new employee
-decision. Tests change the PO and policy after calculation and ensure that a
-stale result cannot be approved, including a change concurrent with approval.
+Since Stage 06 an employee's approval references one reconciliation snapshot
+([ADR 0006](adr/0006-employee-decisions-and-outbox.md)). Inside the approval
+transaction the application re-reads the employee's rights, enforces four
+eyes, takes advisory locks on the purchase order, rules and invoice-number
+keys, and verifies that the snapshot's invoice, order and rule versions and
+duplicate context still match the applicable inputs and that it is
+`matched`. Writers of new order and rule versions and duplicate starts take
+the same locks, so the result cannot change between this check and commit.
+Changed inputs require a new reconciliation and a new decision. Tests change
+the order or the rules between reconciliation and approval, and show that
+these writers wait while the lock is held.
 
-Stage 06 records a future event in an outbox within the same transaction as the
-employee's decision. Stage 09 must deliver that event to a fixed local demo
+Stage 06 records the decision as an `invoice.approved` or `invoice.rejected`
+event in an append-only outbox within the same transaction as the decision and
+its audit event. Stage 09 must deliver that event to a fixed local demo
 receiver through a signed sandbox webhook; documents and API requests cannot
 select its destination. Delivery is retryable and may be repeated; the receiver
 deduplicates by event ID. Do not claim exactly-once network delivery.
@@ -195,9 +210,10 @@ fingerprint and a test keep them from silently falling behind the code.
 
 ## Current exclusions
 
-The HTTP API currently exposes only liveness. HTTP document upload,
-authentication, HTTP workflow commands, an AI runtime, manual
-field correction and a user interface remain unimplemented. The wider project does not
+Since Stage 06 the HTTP API covers document upload, workflow commands,
+reconciliation, decisions, audit and outbox reads with bearer tokens. Account
+management over HTTP, token expiry and SSO, outbox delivery, an AI runtime,
+manual field correction and a user interface remain unimplemented. The wider project does not
 promise production readiness, real payments, autonomous approval or unrestricted
 code execution. OCR, multi-tenant operation and production ERP connectors require
 separate decisions and acceptance criteria.

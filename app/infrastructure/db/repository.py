@@ -10,7 +10,7 @@ from decimal import Decimal
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, select, update
+from sqlalchemy import CursorResult, select, text, update
 from sqlalchemy import func as sql_func
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,8 @@ from app.application.ports import (
     CommandName,
     CommandResult,
     IdempotencyRecord,
+    OutboxEvent,
+    OutboxEventType,
     StoredWorkflow,
     ValidationSnapshot,
     Versioned,
@@ -37,6 +39,7 @@ from app.infrastructure.db.models import (
     IdempotencyRecordRow,
     InvoiceLineRow,
     InvoiceVersionRow,
+    OutboxEventRow,
     PolicyVersionRow,
     PurchaseOrderLineRow,
     PurchaseOrderVersionRow,
@@ -349,6 +352,9 @@ class SqlAlchemyWorkflowRepository:
             purchase_order_version=None if order is None else order.ref,
             policy_version=policy.ref,
             last_snapshot_id=row.last_snapshot_id,
+            business_unit=row.business_unit,
+            created_by=row.created_by,
+            decision_reconciliation_id=row.decision_reconciliation_id,
         )
 
     @staticmethod
@@ -371,6 +377,9 @@ class SqlAlchemyWorkflowRepository:
             "decision_reason": None
             if workflow.decision is None
             else workflow.decision.reason,
+            "business_unit": stored.business_unit,
+            "created_by": stored.created_by,
+            "decision_reconciliation_id": stored.decision_reconciliation_id,
         }
 
     def add_workflow(self, stored: StoredWorkflow) -> None:
@@ -491,6 +500,8 @@ class SqlAlchemyWorkflowRepository:
                 actor_id=event.actor_id,
                 source=event.source,
                 idempotency_key=event.idempotency_key,
+                reconciliation_snapshot_id=event.reconciliation_snapshot_id,
+                outbox_event_id=event.outbox_event_id,
             )
         )
 
@@ -518,6 +529,8 @@ class SqlAlchemyWorkflowRepository:
                 actor_id=row.actor_id,
                 source=row.source,
                 idempotency_key=row.idempotency_key,
+                reconciliation_snapshot_id=row.reconciliation_snapshot_id,
+                outbox_event_id=row.outbox_event_id,
                 event_id=row.id,
                 occurred_at=row.occurred_at,
             )
@@ -554,4 +567,50 @@ class SqlAlchemyWorkflowRepository:
                 result_version=result.version,
                 snapshot_id=result.snapshot_id,
             )
+        )
+
+    # Locks and outbox -----------------------------------------------------------
+
+    def lock_keys(self, keys: tuple[str, ...]) -> None:
+        """Take advisory locks released at commit; sorted order avoids deadlocks.
+
+        Approval and the writers of new order, rule and workflow versions lock
+        the same business keys, so a change cannot slip in between an
+        approval's freshness check and its commit.
+        """
+        for key in sorted(set(keys)):
+            self._session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+                {"key": key},
+            )
+
+    def add_outbox_event(self, event: OutboxEvent) -> None:
+        """Append an outbox event; its payload holds IDs and hashes only."""
+        self._insert(
+            OutboxEventRow(
+                id=event.event_id,
+                event_type=event.event_type.value,
+                workflow_id=event.workflow_id,
+                workflow_version=event.workflow_version,
+                payload=event.payload,
+            )
+        )
+
+    def list_outbox_events(self, workflow_id: str) -> tuple[OutboxEvent, ...]:
+        """Return a workflow's outbox events oldest first."""
+        rows = self._session.scalars(
+            select(OutboxEventRow)
+            .where(OutboxEventRow.workflow_id == workflow_id)
+            .order_by(OutboxEventRow.created_at, OutboxEventRow.id)
+        ).all()
+        return tuple(
+            OutboxEvent(
+                event_id=row.id,
+                event_type=OutboxEventType(row.event_type),
+                workflow_id=row.workflow_id,
+                workflow_version=row.workflow_version,
+                payload=dict(row.payload),
+                created_at=row.created_at,
+            )
+            for row in rows
         )

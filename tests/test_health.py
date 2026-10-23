@@ -31,7 +31,9 @@ def test_openapi_describes_health_contract(client: TestClient) -> None:
     schema = response.json()
     assert schema["info"]["version"] == __version__
     assert schema["info"]["title"] == "enterprise-workflow-agent"
-    assert set(schema["paths"]) == {"/health"}
+    assert "/health" in schema["paths"]
+    # /health is the only endpoint that works without a token.
+    assert "security" not in schema["paths"]["/health"]["get"]
     assert schema["components"]["schemas"]["HealthResponse"]["required"] == [
         "status",
         "service",

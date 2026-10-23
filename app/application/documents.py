@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 from uuid import UUID, uuid4
 
+from app.application.access import Permission, Principal, authorize
 from app.application.errors import (
     ConcurrentWriteError,
     NotFoundError,
@@ -25,7 +26,8 @@ from app.application.ports import (
     TextExtractor,
     UnitOfWork,
 )
-from app.application.workflows import append_invoice_version
+from app.application.users import current_principal
+from app.application.versions import append_invoice_version
 from app.domain.documents import (
     DocumentLimits,
     MediaType,
@@ -167,11 +169,25 @@ class DocumentService:
             limits=self._limits,
         )
 
-    def ingest(self, content: bytes, declared_name: str | None) -> IngestResult:
-        """Prepare and store in one call."""
-        return self.store(self.prepare(content, declared_name))
+    def ingest(
+        self,
+        content: bytes,
+        declared_name: str | None,
+        *,
+        actor: Principal | None = None,
+    ) -> IngestResult:
+        """Prepare and store in one call.
 
-    def store(self, prepared: PreparedDocument) -> IngestResult:
+        An actor needs the submit permission; it is checked before the costly
+        parsing and again, against the stored account, when storing.
+        """
+        if actor is not None:
+            authorize(actor, Permission.SUBMIT, None)
+        return self.store(self.prepare(content, declared_name), actor=actor)
+
+    def store(
+        self, prepared: PreparedDocument, *, actor: Principal | None = None
+    ) -> IngestResult:
         """Store once per identical bytes and once per extractor, atomically."""
         if type(prepared) is not PreparedDocument:
             raise DomainValidationError(
@@ -179,15 +195,18 @@ class DocumentService:
             )
         for _attempt in range(_STORE_ATTEMPTS):
             try:
-                return self._store_once(prepared)
+                return self._store_once(prepared, actor)
             except ConcurrentWriteError:
                 # Another writer stored the same bytes or extraction first.
                 continue
         raise VersionConflictError("Concurrent writers are storing this document.")
 
-    def _store_once(self, prepared: PreparedDocument) -> IngestResult:
+    def _store_once(
+        self, prepared: PreparedDocument, actor: Principal | None
+    ) -> IngestResult:
         """Write document, pages, extraction and invoice version together."""
         with self._unit_of_work() as unit:
+            current_principal(unit, actor, Permission.SUBMIT, None)
             documents = unit.documents
             existing = documents.find_document_by_hash(prepared.content_hash)
             if existing is None:

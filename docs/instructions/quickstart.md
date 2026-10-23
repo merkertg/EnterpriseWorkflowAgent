@@ -2,10 +2,10 @@
 
 [README](../../README.md) · [Detailed Stage 01 guide in Russian](../STAGE_01.md)
 
-Stages 01–05 provide a local FastAPI liveness endpoint, an in-memory domain
-demonstration, PostgreSQL persistence, document intake and reconciliation used
-through Python and command-line tools. The HTTP service does not accept documents or expose
-workflow commands yet.
+Stages 01–06 provide a local FastAPI service, an in-memory domain
+demonstration, PostgreSQL persistence, document intake, reconciliation and
+employee decisions. `/health` works without a database; the business endpoints
+need `DATABASE_URL`, an upgraded schema and a bearer token.
 
 ## Prepare
 
@@ -54,7 +54,7 @@ use it consistently in the URLs.
 | `APP_NAME` | `enterprise-workflow-agent` | Service name; surrounding whitespace is removed and an empty name is rejected |
 | `APP_ENV` | `development` | One of `development`, `test`, `production` |
 | `APP_DEBUG` | `false` | Local debugging; it does not grant access permissions |
-| `DATABASE_URL` | unset | `postgresql+psycopg://...` URL for Stage 03 migrations and demo; hidden in settings output |
+| `DATABASE_URL` | unset | `postgresql+psycopg://...` URL for migrations, command-line tools and the business API; hidden in settings output |
 
 Environment variables override `.env`, which overrides defaults. Explicit
 `Settings(...)` constructor arguments have higher priority. Unknown `.env`
@@ -77,3 +77,9 @@ database needed), then `ingest`, `evidence` or `demo`; see
 For Stage 05 reconciliation, run
 `uv run --locked python -m app.reconciliation_cli demo`; see
 [reconciliation](reconciliation.md).
+
+For Stage 06, create a fictional employee and token with
+`uv run --locked python -m app.users_cli create ...` and `token ...`, then call
+the API with `Authorization: Bearer ...`, or run
+`uv run --locked python -m app.decisions_demo`; see [decisions](decisions.md)
+and [API usage](usage.md).

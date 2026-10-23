@@ -29,6 +29,10 @@ CONTENTS = [
     ("Правила сверки", "Reconciliation rules"),
     ("Сверка строк", "Line reconciliation"),
     ("Снимок и устаревание", "Snapshot and staleness"),
+    ("Вход и роли", "Sign-in and roles"),
+    ("Одобрение по свежей сверке", "Approval on a fresh reconciliation"),
+    ("HTTP API", "HTTP API"),
+    ("Outbox и аудит решения", "Outbox and decision audit"),
     ("Шпаргалка команд", "Command cheat sheet"),
     ("Типичные ошибки", "Common errors"),
     ("Проверь себя", "Check yourself"),
@@ -42,6 +46,7 @@ STAGE_SECTIONS = {
     "03": range(7, 13),
     "04": range(13, 18),
     "05": range(18, 21),
+    "06": range(21, 25),
 }
 
 

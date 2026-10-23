@@ -51,3 +51,50 @@ class IdempotencyKeyClaimedError(ConcurrentWriteError):
     """Another transaction committed the same idempotency key first."""
 
     code = "idempotency_key_claimed"
+
+
+class UnauthenticatedError(ApplicationError):
+    """No valid, unrevoked token for an active user was presented."""
+
+    code = "unauthenticated"
+
+
+class MissingPermissionError(ApplicationError):
+    """The user is in scope but none of their roles grants this action."""
+
+    code = "missing_permission"
+
+
+class SelfApprovalError(ApplicationError):
+    """The employee who started a workflow may not approve it (four eyes)."""
+
+    code = "self_approval_forbidden"
+
+
+class UserExistsError(ApplicationError):
+    """A user with this ID already exists."""
+
+    code = "user_exists"
+
+
+class ReconciliationNotForWorkflowError(ApplicationError):
+    """The cited reconciliation snapshot belongs to another workflow."""
+
+    code = "reconciliation_not_for_workflow"
+
+
+class ReconciliationNotMatchedError(ApplicationError):
+    """Approval needs a snapshot without discrepancies."""
+
+    code = "reconciliation_not_matched"
+
+
+class StaleReconciliationError(ApplicationError):
+    """The snapshot no longer describes the applicable inputs."""
+
+    code = "stale_reconciliation"
+
+    def __init__(self, message: str, reasons: tuple[str, ...]) -> None:
+        """Keep the machine-readable stale reasons for clients."""
+        self.reasons = reasons
+        super().__init__(message)

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.infrastructure.db.documents import SqlAlchemyDocumentRepository
 from app.infrastructure.db.reconciliations import SqlAlchemyReconciliationRepository
 from app.infrastructure.db.repository import SqlAlchemyWorkflowRepository
+from app.infrastructure.db.users import SqlAlchemyUserRepository
 
 
 class SqlAlchemyUnitOfWork:
@@ -20,6 +21,7 @@ class SqlAlchemyUnitOfWork:
         self._repository: SqlAlchemyWorkflowRepository | None = None
         self._documents: SqlAlchemyDocumentRepository | None = None
         self._reconciliations: SqlAlchemyReconciliationRepository | None = None
+        self._users: SqlAlchemyUserRepository | None = None
 
     @property
     def repository(self) -> SqlAlchemyWorkflowRepository:
@@ -42,12 +44,20 @@ class SqlAlchemyUnitOfWork:
             raise RuntimeError("Use the unit of work inside a with block.")
         return self._reconciliations
 
+    @property
+    def users(self) -> SqlAlchemyUserRepository:
+        """Return the user repository sharing this transaction."""
+        if self._users is None:
+            raise RuntimeError("Use the unit of work inside a with block.")
+        return self._users
+
     def __enter__(self) -> Self:
         """Start a session; SQLAlchemy begins the transaction on first use."""
         self._session = self._session_factory()
         self._repository = SqlAlchemyWorkflowRepository(self._session)
         self._documents = SqlAlchemyDocumentRepository(self._session)
         self._reconciliations = SqlAlchemyReconciliationRepository(self._session)
+        self._users = SqlAlchemyUserRepository(self._session)
         return self
 
     def __exit__(
@@ -64,6 +74,7 @@ class SqlAlchemyUnitOfWork:
         self._repository = None
         self._documents = None
         self._reconciliations = None
+        self._users = None
 
     def commit(self) -> None:
         """Commit every write made through this unit's repository."""

@@ -24,16 +24,21 @@ from app.application.ports import (
     ValidationSnapshot,
     VersionRef,
 )
+from app.application.users import UserService
 from app.application.workflows import WorkflowService
 from app.config import Settings
 from app.demo import build_demo_documents
 from app.domain.errors import DomainValidationError
 from app.domain.money import Currency
 from app.domain.rules import ValidationPolicy
-from app.domain.workflow import HumanDecision
-from app.infrastructure.db.session import build_workflow_service, create_database_engine
+from app.infrastructure.db.session import (
+    build_user_service,
+    build_workflow_service,
+    create_database_engine,
+)
 
 _SOURCE = "persistence-demo"
+_UNIT = "DEMO-UNIT"
 
 
 def _ref(ref: VersionRef | None) -> dict[str, object] | None:
@@ -112,8 +117,14 @@ def describe_stored(service: WorkflowService, workflow_id: str) -> dict[str, obj
     }
 
 
-def run_persistence_demo(service: WorkflowService, run_id: str) -> dict[str, object]:
-    """Store, check, replay, conflict, change inputs, re-check and reject."""
+def run_persistence_demo(
+    service: WorkflowService, users: UserService, run_id: str
+) -> dict[str, object]:
+    """Store, check, replay, conflict, change inputs, re-check and reject.
+
+    Since Stage 06 decisions need a registered employee, the run creates a
+    fictional approver; there is no token login in this command-line demo.
+    """
     base_invoice, base_order = build_demo_documents()
     order_id = f"DEMO-PO-{run_id}"
     workflow_id = f"DEMO-WF-{run_id}"
@@ -127,6 +138,12 @@ def run_persistence_demo(service: WorkflowService, run_id: str) -> dict[str, obj
         """Give each user intent its own key, derived from the run ID."""
         return CommandContext(f"{run_id}:{step}", _SOURCE)
 
+    reviewer = users.create_user(
+        f"demo-reviewer-{run_id}",
+        display_name="Fictional demo reviewer",
+        roles=("approver",),
+        units=(_UNIT,),
+    ).principal()
     invoice_v1 = service.record_invoice(invoice)
     order_v1 = service.record_purchase_order(order)
     policy_v1 = service.record_policy(policy)
@@ -137,6 +154,7 @@ def run_persistence_demo(service: WorkflowService, run_id: str) -> dict[str, obj
                 invoice_version_id=invoice_v1.version_id,
                 purchase_order_version_id=order_v1.version_id,
                 policy_version_id=policy_v1.version_id,
+                business_unit=_UNIT,
                 context=context("start"),
             )
         )
@@ -151,12 +169,14 @@ def run_persistence_demo(service: WorkflowService, run_id: str) -> dict[str, obj
             service.check(workflow_id, expected_version=1, context=context("check-1"))
         )
     )
-    decision = HumanDecision("demo-reviewer-1", "Fictional demo decision")
     try:
         service.approve(
             workflow_id,
             expected_version=1,
-            decision=decision,
+            # Never read: the version check fails before the snapshot is loaded.
+            reconciliation_snapshot_id=uuid4(),
+            reason="Fictional demo decision",
+            actor=reviewer,
             context=context("stale-approve"),
         )
     except VersionConflictError as error:
@@ -191,9 +211,8 @@ def run_persistence_demo(service: WorkflowService, run_id: str) -> dict[str, obj
             service.reject(
                 workflow_id,
                 expected_version=4,
-                decision=HumanDecision(
-                    "demo-reviewer-1", "Fictional order no longer covers the invoice"
-                ),
+                reason="Fictional order no longer covers the invoice",
+                actor=reviewer,
                 context=context("reject"),
             )
         )
@@ -240,7 +259,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if arguments.command == "show":
             output = describe_stored(service, arguments.workflow_id)
         else:
-            output = run_persistence_demo(service, uuid4().hex[:12])
+            output = run_persistence_demo(
+                service, build_user_service(engine), uuid4().hex[:12]
+            )
     except (ApplicationError, DomainValidationError) as error:
         print(f"{error.code}: {error}", file=sys.stderr)
         return 1
