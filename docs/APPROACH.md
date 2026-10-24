@@ -22,7 +22,7 @@ real supplier or modify a production ERP system.
 
 ## Delivery strategy
 
-Stages 01–08 are implemented. Stage 01 establishes a small FastAPI service,
+Stages 01–09 are implemented. Stage 01 establishes a small FastAPI service,
 environment settings, tests, static checks and documentation. Stage 02 adds a
 standard-library domain with immutable purchasing models, exact money, seven
 basic rule findings and in-memory workflow transitions.
@@ -46,6 +46,11 @@ deterministic offline providers ([ADR 0007](adr/0007-bounded-review-agent.md));
 Stage 08 adds a Streamlit page that is a plain HTTP client of the API
 ([ADR 0008](adr/0008-streamlit-client-over-http.md)); start it with
 `uv run --locked --group ui python -m streamlit run ui/app.py`.
+Stage 09 delivers outbox events to a signed loopback sandbox receiver with
+bounded retries, tightens resource and request limits, and adds an
+evaluation suite ([ADR 0009](adr/0009-outbox-delivery-and-evaluations.md));
+`uv run --locked python -m app.outbox_demo` and
+`uv run --locked python -m app.evals run` exercise it.
 The default local port is `8003`. The first endpoint is `GET /health`; with
 default settings it returns:
 
@@ -88,6 +93,8 @@ app/
   infrastructure/documents/   # Text decoding and the isolated PDF worker
   infrastructure/extraction/  # Deterministic and model-backed field extractors
   infrastructure/llm/     # Deterministic offline model providers
+  infrastructure/webhook/ # Signed outbox sender: loopback only, no proxy or redirect
+  evals/                  # Evaluation cases, runner and reports
   demo.py                 # Fictional offline scenarios; no HTTP or storage
   persistence_demo.py     # Fictional PostgreSQL scenario and read-back command
   samples.py              # Fictional text/PDF samples and a tiny PDF writer
@@ -97,7 +104,11 @@ app/
   decisions_demo.py       # Fictional Stage 06 decision scenario
   agent_demo.py           # Fictional offline Stage 07 agent scenarios
   ui_demo_setup.py        # Fictional employees, tokens and samples for the page
+  fictional_desk.py       # Shared fictional setup for demos and evaluations
+  outbox_worker.py        # Delivery worker, status and requeue commands
+  outbox_demo.py          # Fictional Stage 09 delivery scenarios
 ui/                       # Streamlit page and its HTTP client; no app imports
+sandbox/                  # Fictional webhook receiver; no app imports
 migrations/               # Alembic environment and revisions
 tests/
 ```
@@ -110,7 +121,7 @@ their behavior is introduced:
 | --- | --- | --- |
 | `domain/` | Typed business objects, money, rules and allowed state transitions | Python and explicit domain types; no HTTP, database or model SDK |
 | `application/` | Use cases, authorization requirements and transaction orchestration | Domain and ports for persistence, extraction and events |
-| `infrastructure/` | SQLAlchemy repositories, PDF/text extraction, deterministic and model-backed field extractors, deterministic model providers (implemented); a real model adapter and event delivery (planned) | Implements application ports |
+| `infrastructure/` | SQLAlchemy repositories, PDF/text extraction, deterministic and model-backed field extractors, deterministic model providers, the signed webhook sender (implemented); a real model adapter (planned) | Implements application ports |
 | `api/` | HTTP schemas, bearer authentication, request validation and error mapping (implemented in Stage 06) | Application use cases |
 
 The composition root wires adapters into use cases. Domain decisions must not
@@ -193,9 +204,13 @@ these writers wait while the lock is held.
 
 Stage 06 records the decision as an `invoice.approved` or `invoice.rejected`
 event in an append-only outbox within the same transaction as the decision and
-its audit event. Stage 09 must deliver that event to a fixed local demo
-receiver through a signed sandbox webhook; documents and API requests cannot
-select its destination. Delivery is retryable and may be repeated; the receiver
+its audit event, together with a `pending` delivery row. Since Stage 09 a
+worker claims one due row at a time with `FOR UPDATE SKIP LOCKED`, sends a
+signed request to the fixed loopback receiver set by `SANDBOX_WEBHOOK_URL`
+and records every attempt in an append-only log; documents and API requests
+cannot select the destination, and the sender ignores proxies and refuses
+redirects. Failures retry with 2–16 s backoff and end as `exhausted`, which
+the API and the page show. Delivery is at least once; the receiver
 deduplicates by event ID. Do not claim exactly-once network delivery.
 
 Keep logs and audit records useful without storing raw document text, personal
@@ -227,9 +242,10 @@ fingerprint and a test keep them from silently falling behind the code.
 Since Stage 06 the HTTP API covers document upload, workflow commands,
 reconciliation, decisions, audit and outbox reads with bearer tokens. Since Stage 07
 a bounded agent runs with deterministic offline providers, and since Stage 08
-a Streamlit page uses the same API. Account management over HTTP, token expiry
-and SSO, outbox delivery, a real model adapter and manual field correction
-remain unimplemented. The wider project does not
+a Streamlit page uses the same API; since Stage 09 outbox events reach a
+local sandbox receiver only. Account management over HTTP, token expiry and
+SSO, delivery to any real system, a real model adapter and manual field
+correction remain unimplemented. The wider project does not
 promise production readiness, real payments, autonomous approval or unrestricted
 code execution. OCR, multi-tenant operation and production ERP connectors require
 separate decisions and acceptance criteria.

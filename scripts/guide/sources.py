@@ -12,14 +12,17 @@ from pathlib import Path
 from typing import Any
 
 from app.api.errors import ERROR_STATUS
+from app.api.limits import MAX_JSON_BODY_BYTES
 from app.api.routes.business import router as business_router
 from app.application.access import ROLE_PERMISSIONS, Permission
 from app.application.agent import AgentLimits
 from app.application.agent_tools import TOOL_SPECS
+from app.application.delivery import DeliveryPolicy
 from app.application.ports import (
     AgentStepKind,
     AgentStopReason,
     CommandName,
+    DeliveryStatus,
     NextStep,
     OutboxEventType,
 )
@@ -34,6 +37,7 @@ from app.domain.extraction import (
 from app.domain.reconciliation import RECONCILIATION_ENGINE, DiscrepancyCode
 from app.domain.rules import IssueCode
 from app.domain.workflow import WorkflowState
+from app.evals.cases import CASES, Category
 from app.infrastructure.db.models import APPEND_ONLY_TABLES, Base
 from app.infrastructure.extraction.labeled_text import EXTRACTOR_NAME
 from ui.presenters import ERROR_HINTS
@@ -88,6 +92,10 @@ class Facts:
     next_steps: tuple[str, ...]
     step_kinds: tuple[str, ...]
     ui_hints: tuple[tuple[str, str], ...]
+    delivery_policy: DeliveryPolicy
+    delivery_statuses: tuple[str, ...]
+    json_body_limit: int
+    eval_categories: tuple[tuple[str, int], ...]
 
 
 def read_source(relative: str) -> str:
@@ -167,6 +175,13 @@ def load_facts() -> Facts:
         next_steps=tuple(item.value for item in NextStep),
         step_kinds=tuple(item.value for item in AgentStepKind),
         ui_hints=tuple(ERROR_HINTS.items()),
+        delivery_policy=DeliveryPolicy(),
+        delivery_statuses=tuple(item.value for item in DeliveryStatus),
+        json_body_limit=MAX_JSON_BODY_BYTES,
+        eval_categories=tuple(
+            (category.value, sum(1 for item in CASES if item.category is category))
+            for category in Category
+        ),
     )
 
 
@@ -203,13 +218,19 @@ def load_verification(path: Path) -> dict[str, Any]:
         raise ValueError("with_database: passed + failed + skipped != total")
     offline = _non_negative_int(without_db.get("passed"), "without_database.passed")
     postgres = _non_negative_int(tests.get("postgres"), "tests.postgres")
+    # Tests for another platform (e.g. Linux-only limits) skip in both runs.
+    platform = _non_negative_int(
+        tests.get("platform_skipped", 0), "tests.platform_skipped"
+    )
+    if skipped != platform:
+        raise ValueError("with_database.skipped must equal tests.platform_skipped")
     if (
         _non_negative_int(without_db.get("skipped"), "without_database.skipped")
-        != postgres
+        != postgres + platform
     ):
-        raise ValueError("without_database.skipped must equal tests.postgres")
-    if offline + postgres != total:
-        raise ValueError("without_database.passed + postgres != total")
+        raise ValueError("without_database.skipped must equal postgres + platform")
+    if offline + postgres + platform != total:
+        raise ValueError("without_database.passed + postgres + platform != total")
     for item in data["checks"]:
         if not isinstance(item.get("command"), str) or item.get("status") not in {
             "passed",

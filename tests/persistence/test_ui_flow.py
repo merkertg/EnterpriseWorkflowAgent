@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, text
 
 from app.api.dependencies import Services
+from app.application.delivery import DeliveryPolicy, WebhookMessage, WebhookResponse
 from app.application.documents import DocumentService
 from app.application.reconciliation import ReconciliationService
 from app.application.users import UserService
@@ -24,7 +25,7 @@ from app.config import Settings
 from app.domain.documents import DocumentLimits
 from app.domain.models import LineItem, PurchaseOrder
 from app.domain.money import Currency, Money
-from app.infrastructure.db.session import build_agent_service
+from app.infrastructure.db.session import build_agent_service, build_delivery_service
 from app.infrastructure.llm.demo import DemoRulesProvider
 from app.main import create_app
 from app.ui_demo_setup import ORDER_ID, setup_ui_demo
@@ -222,3 +223,31 @@ def test_document_instruction_and_assistant(desk: Desk) -> None:
     assert "ready_for_approval" in " ".join(m.value for m in page.markdown)
     assert {m.label: m.value for m in page.metric}["Version"] == "2"
     assert _outbox_count(desk.engine, workflow_id) == 0
+
+
+class _Down:
+    """A receiver that is always unavailable."""
+
+    def send(self, message: WebhookMessage, timeout_seconds: float) -> WebhookResponse:
+        """Answer 503 without sending."""
+        return WebhookResponse(503, "http_503")
+
+
+def test_exhausted_delivery_is_shown_to_the_approver(desk: Desk) -> None:
+    """After the worker gives up, the page says so and names the next step."""
+    workflow_id = _start(desk, "clean.txt")
+    _approve(_open(desk, "ui-approver", workflow_id))
+    page = _open(desk, "ui-approver", workflow_id)
+    assert not page.error
+    worker = build_delivery_service(
+        desk.engine, _Down(), "s" * 32, DeliveryPolicy(max_attempts=1)
+    )
+    reports = worker.deliver_due()
+    assert [(r.workflow_id, r.status.value) for r in reports] == [
+        (workflow_id, "exhausted")
+    ], reports
+    page = _open(desk, "ui-approver", workflow_id)
+    assert len(page.error) == 1
+    error = _texts(page.error)
+    assert "not delivered after 1 attempt (http_503)" in error
+    assert "outbox_worker requeue" in error

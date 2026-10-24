@@ -37,6 +37,7 @@ from app.application.ports import (
     CommandName,
     CommandResult,
     IdempotencyRecord,
+    OutboxEntry,
     OutboxEvent,
     OutboxEventType,
     StoredWorkflow,
@@ -620,12 +621,16 @@ class WorkflowService:
 
     def outbox_events(
         self, workflow_id: str, *, actor: Principal | None = None
-    ) -> tuple[OutboxEvent, ...]:
-        """Return the outbox events written by a visible workflow's decisions."""
+    ) -> tuple[OutboxEntry, ...]:
+        """Return a visible workflow's decision events with delivery state.
+
+        Employees see whether the event reached the sandbox receiver, is
+        waiting for a retry, or exhausted its attempts.
+        """
         workflow_id = validate_text(workflow_id, "workflow_id")
         with self._unit_of_work() as unit:
             _visible(unit, workflow_id, actor)
-            return unit.repository.list_outbox_events(workflow_id)
+            return unit.outbox.list_entries(workflow_id)
 
     # Shared command machinery -------------------------------------------------
 

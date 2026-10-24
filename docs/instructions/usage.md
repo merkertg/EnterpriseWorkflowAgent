@@ -62,7 +62,7 @@ result with `"replayed": true`; the same key with other arguments is
 | `POST /workflows/{id}/approve` | `decide` | `expected_version`, `reconciliation_snapshot_id`, `reason` |
 | `POST /workflows/{id}/reject` | `decide` | `expected_version`, `reason` |
 | `GET /workflows/{id}/audit` | `view` | Audit events with actor, snapshot and outbox references |
-| `GET /workflows/{id}/outbox` | `view` | Stored decision events |
+| `GET /workflows/{id}/outbox` | `view` | Decision events with `delivery` (status, attempts, next attempt, last error) and every attempt (Stage 09) |
 | `POST /workflows/{id}/agent-runs` | `assist` | Run the bounded review agent (provider `demo-rules/1`); returns the explanation once, the checked draft and the trace |
 | `GET /agent-runs/{run_id}` | `view` | A stored run and trace; the explanation is not stored, only its hash and length |
 | `GET /workflows?state=&limit=` | `view` | Recently changed workflows of the caller's units (limit 1-500, default 100) |
@@ -70,6 +70,10 @@ result with `"replayed": true`; the same key with other arguments is
 
 Request bodies reject unknown fields and use strict types (`"2"` is not a
 version). Uploads are read only up to 1 MiB; a larger body is `413 too_large`.
+Since Stage 09 every other `POST`, `PUT` or `PATCH` body must declare a
+`Content-Length` of at most 64 KiB (`413 too_large`; `411 length_required`
+without a length), and an assistant run is refused with
+`429 agent_run_limit` after 20 runs of the same workflow in an hour.
 
 ## Example: approve a reconciled workflow
 
@@ -93,8 +97,10 @@ locations and messages, never the submitted values.
 | 403 | `missing_permission`, `self_approval_forbidden` |
 | 404 | `not_found`, also for another business unit's workflow |
 | 409 | `version_conflict`, `invalid_transition`, `stale_validation`, `stale_reconciliation`, `reconciliation_not_matched`, `idempotency_key_reused`, `workflow_exists`, `concurrent_write` |
+| 411 | `length_required` |
 | 413 | `too_large` |
 | 422 | `invalid_request`, document rejection codes, `reconciliation_not_for_workflow`, other domain validation codes |
+| 429 | `agent_run_limit` |
 | 503 | `database_not_configured`, `database_unavailable` |
 
 ## API documentation

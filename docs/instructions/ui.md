@@ -37,7 +37,11 @@ listens on `127.0.0.1:8501`, hides the Deploy button and caps uploads at
   version, unit, starter, decision, document fields with their source lines,
   the latest reconciliation with stale reasons and quoted discrepancies,
   actions (check, reconcile, pin the latest order version, approve, reject),
-  the assistant's draft and trace, the audit trail and outbox events.
+  the assistant's draft and trace, the audit trail and outbox events with
+  their delivery status, attempt count and last error (Stage 09). A retry
+  is shown as a warning; an exhausted delivery as an error that names the
+  operator's `python -m app.outbox_worker requeue EVENT_ID` command. The
+  page itself cannot requeue.
 - **New invoice**: upload a `.txt`/`.pdf` or paste text; see the extraction
   status, problems and fields; start the workflow and run the basic check.
 

@@ -39,6 +39,9 @@ CONTENTS = [
     ("Интерфейс поверх API", "An interface over the API"),
     ("Повтор и перезагрузка", "Repeats and reloads"),
     ("Ошибки и проверка страницы", "Errors and page checks"),
+    ("Доставка outbox", "Outbox delivery"),
+    ("Сбои и повторная доставка", "Failures and redelivery"),
+    ("Ограничения и оценки", "Limits and evaluations"),
     ("Шпаргалка команд", "Command cheat sheet"),
     ("Типичные ошибки", "Common errors"),
     ("Проверь себя", "Check yourself"),
@@ -55,6 +58,7 @@ STAGE_SECTIONS = {
     "06": range(21, 25),
     "07": range(25, 28),
     "08": range(28, 31),
+    "09": range(31, 34),
 }
 
 

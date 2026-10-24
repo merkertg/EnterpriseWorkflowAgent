@@ -24,7 +24,10 @@ ERROR_HINTS = {
     "idempotency_key_reused": "This command was already sent with other data.",
     "workflow_exists": "Choose another workflow ID.",
     "invalid_request": "Fill in every field; the reason must not be empty.",
-    "too_large": "The document is larger than 1 MiB.",
+    "too_large": "Too large: documents up to 1 MiB, other requests up to 64 KiB.",
+    "length_required": "The client must send a Content-Length header.",
+    "agent_run_limit": "The assistant's hourly quota for this workflow is used up.",
+    "resource_limit": "The PDF needed too much memory or CPU time to read.",
     "unsupported_type": "Use UTF-8 text or a PDF with a text layer.",
     "no_text_layer": "Scanned PDFs are not supported (no OCR).",
     "database_not_configured": "Start the API with DATABASE_URL set.",
@@ -125,15 +128,50 @@ def audit_rows(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def outbox_rows(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Stored decision events."""
+    """Decision events with their delivery state as the server reports it."""
     return [
         {
             "event": item["event_type"],
             "version": item["workflow_version"],
             "decided by": item["payload"].get("decided_by", ""),
+            "delivery": item["delivery"]["status"],
+            "attempts": item["delivery"]["total_attempts"],
+            "last error": item["delivery"]["last_error"] or "",
         }
         for item in events
     ]
+
+
+def delivery_notices(events: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    """A warning per event that is not delivered yet, as (level, text).
+
+    Exhausted events are errors: someone must look at the receiver and
+    requeue them. Retries are warnings; pending events need no notice.
+    """
+    notices: list[tuple[str, str]] = []
+    for item in events:
+        delivery = item["delivery"]
+        if delivery["status"] == "exhausted":
+            count = delivery["attempts"]
+            notices.append(
+                (
+                    "error",
+                    f"{item['event_type']} was not delivered after {count} "
+                    f"attempt{'' if count == 1 else 's'} ({delivery['last_error']}). "
+                    f"Ask an operator to check the receiver and run: "
+                    f"python -m app.outbox_worker requeue {item['event_id']}",
+                )
+            )
+        elif delivery["status"] == "retry_scheduled":
+            notices.append(
+                (
+                    "warning",
+                    f"{item['event_type']}: attempt {delivery['attempts']} failed "
+                    f"({delivery['last_error']}); next try at "
+                    f"{delivery['next_attempt_at']}.",
+                )
+            )
+    return notices
 
 
 def trace_rows(run: dict[str, Any]) -> list[dict[str, Any]]:

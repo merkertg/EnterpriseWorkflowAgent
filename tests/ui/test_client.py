@@ -8,7 +8,14 @@ import pytest
 
 from ui.client import ApiClient, ApiError, RawResponse
 from ui.keys import command_key
-from ui.presenters import describe_error, discrepancy_rows, field_rows, trace_rows
+from ui.presenters import (
+    delivery_notices,
+    describe_error,
+    discrepancy_rows,
+    field_rows,
+    outbox_rows,
+    trace_rows,
+)
 
 TOKEN = "ewa_" + "a" * 43
 
@@ -202,3 +209,40 @@ def test_presenters_reshape_without_deciding() -> None:
             "bytes": "",
         }
     ]
+
+
+def test_delivery_rows_and_notices_copy_the_server_state() -> None:
+    """Pending needs no notice; retries warn; exhaustion is an error."""
+
+    def event(status: str) -> dict[str, Any]:
+        """A minimal event in one delivery status."""
+        return {
+            "event_id": "e1",
+            "event_type": "invoice.rejected",
+            "workflow_version": 3,
+            "payload": {},
+            "delivery": {
+                "status": status,
+                "attempts": 2,
+                "total_attempts": 4,
+                "last_error": None if status == "delivered" else "http_503",
+                "next_attempt_at": "soon",
+            },
+        }
+
+    assert outbox_rows([event("retry_scheduled")]) == [
+        {
+            "event": "invoice.rejected",
+            "version": 3,
+            "decided by": "",
+            "delivery": "retry_scheduled",
+            "attempts": 4,
+            "last error": "http_503",
+        }
+    ]
+    assert delivery_notices([event("pending"), event("delivered")]) == []
+    levels = [
+        level
+        for level, _ in delivery_notices([event("retry_scheduled"), event("exhausted")])
+    ]
+    assert levels == ["warning", "error"]

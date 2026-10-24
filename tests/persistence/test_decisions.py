@@ -21,7 +21,12 @@ from app.application.errors import (
     StaleReconciliationError,
     UnauthenticatedError,
 )
-from app.application.ports import CommandName, CommandResult, OutboxEventType
+from app.application.ports import (
+    CommandName,
+    CommandResult,
+    DeliveryStatus,
+    OutboxEventType,
+)
 from app.application.reconciliation import ReconciliationService
 from app.application.users import UserService
 from app.application.versions import invoice_number_key, purchase_order_key, rules_key
@@ -180,7 +185,10 @@ def test_approval_writes_decision_outbox_and_audit_together(desk: Desk) -> None:
     )
     assert stored.workflow.decision is not None
     assert stored.workflow.decision.actor_id == "approver-1"
-    [event] = desk.workflows.outbox_events(workflow_id)
+    [entry] = desk.workflows.outbox_events(workflow_id)
+    event = entry.event
+    assert entry.delivery.status is DeliveryStatus.PENDING
+    assert (entry.delivery.attempts, entry.attempts) == (0, ())
     assert event.event_type is OutboxEventType.INVOICE_APPROVED
     assert event.workflow_version == 3 == result.version
     assert event.payload["decided_by"] == "approver-1"
@@ -209,7 +217,8 @@ def test_rejection_writes_its_own_outbox_event(desk: Desk) -> None:
         actor=desk.team.approver,
         context=context("reject"),
     )
-    [event] = desk.workflows.outbox_events(workflow_id)
+    [entry] = desk.workflows.outbox_events(workflow_id)
+    event = entry.event
     assert event.event_type is OutboxEventType.INVOICE_REJECTED
     audit = desk.workflows.audit_trail(workflow_id)[-1]
     assert audit.outbox_event_id == event.event_id

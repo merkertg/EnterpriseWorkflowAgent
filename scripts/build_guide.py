@@ -61,6 +61,7 @@ STAGE_COLOURS = {
     "06": "#F9A8D4",
     "07": "#FCD34D",
     "08": "#A5B4FC",
+    "09": "#6EE7B7",
 }
 
 
@@ -107,11 +108,11 @@ def cover_page(c: Canvas, doc: Any) -> None:
             "Наглядное руководство: uv и FastAPI, точные деньги и правила, "
             "состояния процесса, PostgreSQL и миграции, транзакции, аудит и повторы, "
             "документы с цитатами, сверка с заказом, решение сотрудника с ролями, "
-            "ограниченный агент и интерфейс.",
+            "ограниченный агент, интерфейс, подписанная доставка и оценки.",
             "A visual guide: uv and FastAPI, exact money and rules, workflow states, "
             "PostgreSQL and migrations, transactions, audit and retries, documents "
             "with citations, order reconciliation, role-checked decisions, a bounded "
-            "agent and an interface.",
+            "agent, an interface, signed delivery and evaluations.",
         ),
         "PT",
         13.5,

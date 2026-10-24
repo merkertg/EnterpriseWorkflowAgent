@@ -208,7 +208,7 @@ def add_stage01(story: list[Any], facts: Facts) -> None:
         code_block(
             "uv run --locked ruff check .\n"
             "uv run --locked ruff format --check .\n"
-            "uv run --locked --group ui mypy app tests scripts migrations ui\n"
+            "uv run --locked --group ui mypy app tests scripts migrations ui sandbox\n"
             "uv run --locked --group ui pytest\n"
             "uv run --locked python scripts/check_docs.py"
         ),

@@ -33,7 +33,9 @@ from app.application.access import Role
 from app.application.ports import (
     AgentStepKind,
     AgentStopReason,
+    AttemptOutcome,
     CommandName,
+    DeliveryStatus,
     NextStep,
     OutboxEventType,
 )
@@ -76,6 +78,8 @@ FIELD_STATUS_VALUES = tuple(item.value for item in FieldStatus)
 RECONCILIATION_STATUS_VALUES = tuple(item.value for item in ReconciliationStatus)
 ROLE_VALUES = tuple(item.value for item in Role)
 OUTBOX_EVENT_VALUES = tuple(item.value for item in OutboxEventType)
+DELIVERY_STATUS_VALUES = tuple(item.value for item in DeliveryStatus)
+ATTEMPT_OUTCOME_VALUES = tuple(item.value for item in AttemptOutcome)
 STOP_REASON_VALUES = tuple(item.value for item in AgentStopReason)
 STEP_KIND_VALUES = tuple(item.value for item in AgentStepKind)
 NEXT_STEP_VALUES = tuple(item.value for item in NextStep)
@@ -580,7 +584,7 @@ class ApiTokenRow(Base):
 
 
 class OutboxEventRow(Base):
-    """An event written with a decision; delivery attempts arrive in Stage 09."""
+    """An event written with a decision; its delivery state lives beside it."""
 
     __tablename__ = "outbox_events"
     __table_args__ = (
@@ -596,6 +600,71 @@ class OutboxEventRow(Base):
     )
     workflow_version: Mapped[int] = mapped_column(Integer)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = _created_at()
+
+
+class OutboxDeliveryRow(Base):
+    """The one mutable delivery row per event; the worker claims it with a lock."""
+
+    __tablename__ = "outbox_deliveries"
+    __table_args__ = (
+        CheckConstraint(_one_of("status", DELIVERY_STATUS_VALUES), name="status"),
+        CheckConstraint(
+            "attempts >= 0 AND total_attempts >= attempts AND requeues >= 0",
+            name="counts_valid",
+        ),
+        CheckConstraint(
+            "(status = 'delivered') = (delivered_at IS NOT NULL)",
+            name="delivered_at_matches_status",
+        ),
+    )
+
+    event_id: Mapped[UUID] = mapped_column(
+        ForeignKey("outbox_events.id"), primary_key=True
+    )
+    status: Mapped[str] = mapped_column(String(32), index=True)
+    attempts: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    total_attempts: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    requeues: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    last_error: Mapped[str | None] = mapped_column(String(64))
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class OutboxAttemptRow(Base):
+    """One delivery attempt: status or error code and timing, never the body."""
+
+    __tablename__ = "outbox_attempts"
+    __table_args__ = (
+        CheckConstraint(_one_of("outcome", ATTEMPT_OUTCOME_VALUES), name="outcome"),
+        CheckConstraint("seq > 0", name="seq_positive"),
+        CheckConstraint("duration_ms >= 0", name="duration_non_negative"),
+        CheckConstraint(
+            "http_status IS NULL OR http_status BETWEEN 100 AND 599",
+            name="http_status_range",
+        ),
+        CheckConstraint(
+            "(outcome = 'delivered') = (error_code IS NULL)",
+            name="error_code_matches_outcome",
+        ),
+    )
+
+    event_id: Mapped[UUID] = mapped_column(
+        ForeignKey("outbox_events.id"), primary_key=True
+    )
+    seq: Mapped[int] = mapped_column(Integer, primary_key=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    duration_ms: Mapped[int] = mapped_column(Integer)
+    outcome: Mapped[str] = mapped_column(String(16))
+    http_status: Mapped[int | None] = mapped_column(Integer)
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    duplicate: Mapped[bool | None] = mapped_column(Boolean)
     created_at: Mapped[datetime] = _created_at()
 
 
@@ -693,4 +762,5 @@ APPEND_ONLY_TABLES = (
     "outbox_events",
     "agent_runs",
     "agent_steps",
+    "outbox_attempts",
 )

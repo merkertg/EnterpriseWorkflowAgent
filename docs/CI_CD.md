@@ -21,13 +21,13 @@ and documentation** выполняется на `ubuntu-24.04` с Python 3.12
 
 | Проверка | Команда | Для чего |
 | --- | --- | --- |
-| Зависимости | `uv sync --locked` | Установить согласованный набор из lock-файла |
+| Зависимости | `uv sync --locked --group ui` | Установить согласованный набор из lock-файла вместе с группой интерфейса |
 | Lint | `uv run --locked ruff check .` | Найти типичные ошибки и нарушения правил |
 | Форматирование | `uv run --locked ruff format --check .` | Проверить оформление без правок |
-| Типы | `uv run --locked mypy app tests scripts migrations` | Проверить типы в строгом режиме |
+| Типы | `uv run --locked --group ui mypy app tests scripts migrations ui sandbox` | Проверить типы в строгом режиме |
 | Миграции | `uv run --locked alembic upgrade head` | Применить схему к тестовой базе CI |
 | Схема и модели | `uv run --locked alembic check` | Убедиться, что модели не разошлись с миграциями |
-| Тесты | `uv run --locked pytest` | Проверить поведение, включая тесты PostgreSQL |
+| Тесты | `uv run --locked --group ui pytest` | Проверить поведение, включая тесты PostgreSQL и оценки |
 | Ссылки | `uv run --locked python scripts/check_docs.py` | Проверить локальные ссылки Markdown |
 
 Этап 01 не требовал базы данных, Docker, корпоративных учётных записей
@@ -68,11 +68,11 @@ digest-хешу образа, — той же версии, на которой 
 Из корня проекта:
 
 ```bash
-uv sync --locked
+uv sync --locked --group ui
 uv run --locked ruff check .
 uv run --locked ruff format --check .
-uv run --locked mypy app tests scripts migrations
-uv run --locked pytest
+uv run --locked --group ui mypy app tests scripts migrations ui sandbox
+uv run --locked --group ui pytest
 uv run --locked python scripts/check_docs.py
 ```
 
@@ -130,7 +130,11 @@ Ruff и mypy не заменяют тесты, а тесты не заменяю
 только детерминированные провайдеры, поэтому CI не нужен ключ модели.
 На этапе 08 CI ставит группу зависимостей `ui` (`uv sync --locked --group
 ui`) и запускает mypy и pytest с ней: иначе тесты страницы Streamlit
-пропускались бы. Когда появятся
-документы и агент — CI дополнится тестовыми сценариями и оценкой качества. Сборка контейнера, публикация образа и развёртывание
+пропускались бы. На этапе 09 mypy проверяет ещё пакет `sandbox`, миграция
+`0006` применяется общими шагами, а весь набор оценок выполняется как тест
+PostgreSQL (`tests/persistence/test_evals.py`); получатель webhook
+запускается внутри тестового процесса на loopback, отдельный сервис не
+нужен. Тест лимита памяти PDF-процесса выполняется только на Linux, то
+есть именно в CI, — но удачный удалённый запуск пока не подтверждён. Сборка контейнера, публикация образа и развёртывание
 добавляются вместе с соответствующим этапом. Каждый новый шаг должен
 иметь понятную цель и проверяемый результат.

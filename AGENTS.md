@@ -24,8 +24,8 @@
 - Detailed guides for later stages are added when those stages are implemented.
   Future directories and unavailable files must not be presented as shipped.
 - Keep the Russian and English PDF guides in `docs/guide/` current. After any
-  change to the generator, `verification.json`, `app/`, `ui/`, migrations or
-  `uv.lock`, rebuild both with
+  change to the generator, `verification.json`, `app/`, `ui/`, `sandbox/`,
+  migrations or `uv.lock`, rebuild both with
   `uv run --locked --group guide python scripts/build_guide.py`, inspect every
   page of both, and update their sections when a stage changes.
   `tests/test_guide_pdfs.py` fails if a PDF is older than its sources.

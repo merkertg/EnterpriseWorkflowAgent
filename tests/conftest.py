@@ -15,7 +15,14 @@ def isolated_settings(
 ) -> Iterator[None]:
     """Clear cached settings and remove application variables for every test."""
     monkeypatch.chdir(tmp_path)
-    for name in ("APP_NAME", "APP_ENV", "APP_DEBUG", "DATABASE_URL"):
+    for name in (
+        "APP_NAME",
+        "APP_ENV",
+        "APP_DEBUG",
+        "DATABASE_URL",
+        "SANDBOX_WEBHOOK_URL",
+        "SANDBOX_WEBHOOK_SECRET",
+    ):
         monkeypatch.delenv(name, raising=False)
     get_settings.cache_clear()
     yield

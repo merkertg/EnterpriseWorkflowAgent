@@ -19,6 +19,8 @@ FORBIDDEN = {
     "app/application": (*FRAMEWORKS, "psycopg", "app.infrastructure", "app.api"),
     # The interface is an HTTP client: no application code, no database.
     "ui": ("app", "sqlalchemy", "psycopg", "alembic", "pypdf", "fastapi"),
+    # The receiver stands in for another system: it checks signatures itself.
+    "sandbox": ("app", "ui", "sqlalchemy", "psycopg", "alembic", "pypdf"),
 }
 
 

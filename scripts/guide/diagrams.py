@@ -35,7 +35,7 @@ from guide.layout import (
     rbox,
 )
 
-STAGES_DONE = 8
+STAGES_DONE = 9
 
 
 def roadmap() -> Diagram:
@@ -720,10 +720,10 @@ def approval_checks() -> Diagram:
 
 
 def outbox_commit() -> Diagram:
-    """Decision, outbox event and audit commit together; delivery comes later."""
+    """Decision, outbox event and audit commit together; a worker delivers later."""
 
     def draw(c: Canvas, w: float, h: float) -> None:
-        """Draw the transaction on the left and the planned delivery on the right."""
+        """Draw the transaction on the left and the Stage 09 worker on the right."""
         frame_w = w * 0.58
         rbox(c, 0, 18, frame_w, h - 22, WHITE, GREEN, r=10, lw=1.2, dash=(4, 3))
         c.setFillColor(GREEN)
@@ -763,11 +763,10 @@ def outbox_commit() -> Diagram:
                 "этап 09: повторы,\nподписанный sandbox webhook",
                 "Stage 09: retries,\nsigned sandbox webhook",
             ),
-            SLATE_L,
-            MUTED,
+            TEAL_L,
+            TEAL,
             9.5,
             7.6,
-            dash=(3, 2),
         )
         c.setFillColor(MUTED)
         c.setFont("PT-Italic", 8.4)
@@ -775,8 +774,8 @@ def outbox_commit() -> Diagram:
             0,
             4,
             tr(
-                "Нет решения без события и события без решения; доставки пока нет.",
-                "No decision without an event and no event without a decision; no delivery yet.",
+                "Нет решения без события; с этапа 09 с ними пишется и статус доставки pending.",
+                "No decision without an event; since Stage 09 a pending delivery joins them.",
             ),
         )
 
@@ -1095,3 +1094,150 @@ def repeat_paths() -> Diagram:
         )
 
     return Diagram(170, draw)
+
+
+def delivery_path() -> Diagram:
+    """From the decision's transaction to the receiver, and the three outcomes."""
+
+    def draw(c: Canvas, w: float, h: float) -> None:
+        """Draw four steps on top and the outcomes of an attempt underneath."""
+        gap, bh = 14, 56
+        bw = (w - 3 * gap) / 4
+        top = h - bh - 4
+        steps = [
+            (
+                tr("Решение", "Decision"),
+                tr(
+                    "процесс, событие,\nдоставка pending",
+                    "workflow, event,\npending delivery",
+                ),
+                PINK_L,
+                PINK,
+            ),
+            (
+                tr("Обработчик", "Worker"),
+                tr("FOR UPDATE\nSKIP LOCKED", "FOR UPDATE\nSKIP LOCKED"),
+                TEAL_L,
+                TEAL,
+            ),
+            (
+                "POST + HMAC",
+                tr(
+                    "v1=HMAC(время.тело),\nтаймаут 5 с",
+                    "v1=HMAC(ts.body),\n5 s timeout",
+                ),
+                AMBER_L,
+                AMBER,
+            ),
+            (
+                tr("Получатель", "Receiver"),
+                tr(
+                    "127.0.0.1: подпись, ±300 с,\nодно действие на ID",
+                    "127.0.0.1: signature, ±300 s,\none action per ID",
+                ),
+                GREEN_L,
+                GREEN,
+            ),
+        ]
+        for index, (title, sub, fill, edge) in enumerate(steps):
+            x = index * (bw + gap)
+            node(c, x, top, bw, bh, title, sub, fill, edge, 9.6, 7.4)
+            if index:
+                arrow(c, x - gap + 1, top + bh / 2, x - 1, top + bh / 2)
+        low = 26
+        ow = (w - 2 * gap) / 3
+        outcomes = [
+            ("2xx", tr("delivered", "delivered"), GREEN_L, GREEN),
+            (
+                tr("ошибка", "failure"),
+                tr("retry_scheduled: 2, 4, 8, 16 с", "retry_scheduled: 2, 4, 8, 16 s"),
+                AMBER_L,
+                AMBER,
+            ),
+            (
+                tr("5 неудач", "5 failures"),
+                tr("exhausted → requeue оператором", "exhausted → operator requeue"),
+                RED_L,
+                RED,
+            ),
+        ]
+        source_x = 2 * (bw + gap) + bw / 2
+        for index, (title, sub, fill, edge) in enumerate(outcomes):
+            x = index * (ow + gap)
+            node(c, x, low, ow, 44, title, sub, fill, edge, 9.4, 7.6)
+            arrow(c, source_x, top - 1, x + ow / 2, low + 45)
+        c.setFillColor(MUTED)
+        c.setFont("PT-Italic", 8.4)
+        c.drawString(
+            0,
+            6,
+            tr(
+                "Адрес задаёт только настройка: 127.0.0.1 или [::1], без прокси и перенаправлений.",
+                "Only a setting names the address: 127.0.0.1 or [::1], no proxies, no redirects.",
+            ),
+        )
+
+    return Diagram(176, draw)
+
+
+def redelivery() -> Diagram:
+    """A failure after the receiver acted: the event is sent again, acted on once."""
+
+    def draw(c: Canvas, w: float, h: float) -> None:
+        """Draw five steps of one redelivery from left to right."""
+        gap, bh = 12, 62
+        bw = (w - 4 * gap) / 5
+        y = h - bh - 6
+        steps = [
+            (tr("Отправка", "Send"), tr("попытка 1", "attempt 1"), TEAL_L, TEAL),
+            (
+                tr("Получатель", "Receiver"),
+                tr("действие 1,\nполучений 1", "action 1,\nreceipts 1"),
+                GREEN_L,
+                GREEN,
+            ),
+            (
+                tr("Сбой", "Failure"),
+                tr(
+                    "ответ потерян, таймаут\nили падение до COMMIT",
+                    "lost answer, timeout\nor crash before COMMIT",
+                ),
+                RED_L,
+                RED,
+            ),
+            (
+                tr("Снова в очереди", "Due again"),
+                tr(
+                    "попытка не записана\nили retry_scheduled",
+                    "attempt not recorded\nor retry_scheduled",
+                ),
+                AMBER_L,
+                AMBER,
+            ),
+            (
+                tr("Повтор", "Retry"),
+                tr(
+                    "200 duplicate:\nдействий всё ещё 1",
+                    "200 duplicate:\nstill one action",
+                ),
+                GREEN_L,
+                GREEN,
+            ),
+        ]
+        for index, (title, sub, fill, edge) in enumerate(steps):
+            x = index * (bw + gap)
+            node(c, x, y, bw, bh, title, sub, fill, edge, 9.4, 7.3)
+            if index:
+                arrow(c, x - gap + 1, y + bh / 2, x - 1, y + bh / 2)
+        c.setFillColor(MUTED)
+        c.setFont("PT-Italic", 8.4)
+        c.drawString(
+            0,
+            6,
+            tr(
+                "Как минимум один раз: дубликат отсеивает получатель по ID события.",
+                "At least once: the receiver drops the duplicate by event ID.",
+            ),
+        )
+
+    return Diagram(96, draw)

@@ -52,6 +52,8 @@ USD_RULES = ReconciliationRules(
 TABLES = (
     "agent_steps",
     "agent_runs",
+    "outbox_attempts",
+    "outbox_deliveries",
     "outbox_events",
     "api_tokens",
     "users",

@@ -98,3 +98,9 @@ class StaleReconciliationError(ApplicationError):
         """Keep the machine-readable stale reasons for clients."""
         self.reasons = reasons
         super().__init__(message)
+
+
+class AgentRunLimitError(ApplicationError):
+    """The workflow reached its hourly quota of assistant runs."""
+
+    code = "agent_run_limit"

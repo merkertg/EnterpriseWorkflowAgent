@@ -100,12 +100,13 @@ def describe_decisions(
         ],
         "outbox": [
             {
-                "event_id": str(event.event_id),
-                "event_type": event.event_type.value,
-                "workflow_version": event.workflow_version,
-                "payload": event.payload,
+                "event_id": str(entry.event.event_id),
+                "event_type": entry.event.event_type.value,
+                "workflow_version": entry.event.workflow_version,
+                "payload": entry.event.payload,
+                "delivery": entry.delivery.status.value,
             }
-            for event in workflows.outbox_events(workflow_id)
+            for entry in workflows.outbox_events(workflow_id)
         ],
     }
 

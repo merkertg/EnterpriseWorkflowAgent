@@ -18,7 +18,9 @@ from app.application.ports import (
     AgentRunRecord,
     AuditEvent,
     CommandResult,
-    OutboxEvent,
+    DeliveryAttempt,
+    OutboxDelivery,
+    OutboxEntry,
     StoredDocument,
     StoredExtraction,
     StoredWorkflow,
@@ -363,8 +365,60 @@ class AuditEventResponse(BaseModel):
         )
 
 
+class DeliveryAttemptResponse(BaseModel):
+    """One delivery attempt: status or error code and timing."""
+
+    seq: int
+    started_at: datetime
+    duration_ms: int
+    outcome: str
+    http_status: int | None
+    error_code: str | None
+    duplicate: bool | None
+
+    @classmethod
+    def of(cls, attempt: DeliveryAttempt) -> "DeliveryAttemptResponse":
+        """Copy an attempt."""
+        return cls(
+            seq=attempt.seq,
+            started_at=attempt.started_at,
+            duration_ms=attempt.duration_ms,
+            outcome=attempt.outcome.value,
+            http_status=attempt.http_status,
+            error_code=attempt.error_code,
+            duplicate=attempt.duplicate,
+        )
+
+
+class DeliveryResponse(BaseModel):
+    """Where the event is on its way to the sandbox receiver."""
+
+    status: str
+    attempts: int
+    total_attempts: int
+    requeues: int
+    next_attempt_at: datetime
+    last_error: str | None
+    last_attempt_at: datetime | None
+    delivered_at: datetime | None
+
+    @classmethod
+    def of(cls, delivery: OutboxDelivery) -> "DeliveryResponse":
+        """Copy the delivery state."""
+        return cls(
+            status=delivery.status.value,
+            attempts=delivery.attempts,
+            total_attempts=delivery.total_attempts,
+            requeues=delivery.requeues,
+            next_attempt_at=delivery.next_attempt_at,
+            last_error=delivery.last_error,
+            last_attempt_at=delivery.last_attempt_at,
+            delivered_at=delivery.delivered_at,
+        )
+
+
 class OutboxEventResponse(BaseModel):
-    """A stored decision event; delivery is not implemented until Stage 09."""
+    """A stored decision event with its delivery state and attempt log."""
 
     event_id: UUID
     event_type: str
@@ -372,10 +426,13 @@ class OutboxEventResponse(BaseModel):
     workflow_version: int
     payload: dict[str, Any]
     created_at: datetime | None
+    delivery: DeliveryResponse
+    attempts: list[DeliveryAttemptResponse]
 
     @classmethod
-    def of(cls, event: OutboxEvent) -> "OutboxEventResponse":
-        """Copy an outbox event."""
+    def of(cls, entry: OutboxEntry) -> "OutboxEventResponse":
+        """Copy an outbox event, its delivery and its attempts."""
+        event = entry.event
         return cls(
             event_id=event.event_id,
             event_type=event.event_type.value,
@@ -383,6 +440,8 @@ class OutboxEventResponse(BaseModel):
             workflow_version=event.workflow_version,
             payload=event.payload,
             created_at=event.created_at,
+            delivery=DeliveryResponse.of(entry.delivery),
+            attempts=[DeliveryAttemptResponse.of(item) for item in entry.attempts],
         )
 
 

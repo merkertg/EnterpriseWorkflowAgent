@@ -60,6 +60,10 @@ _REJECTION_TEXT = {
         "Чтение PDF не уложилось во время",
         "PDF parsing exceeded the time limit",
     ),
+    "resource_limit": (
+        "PDF-процесс превысил лимит памяти или процессора (этап 09)",
+        "The PDF worker exceeded its memory or CPU limit (stage 09)",
+    ),
 }
 _PROBLEM_TEXT = {
     "missing_field": ("Поле не найдено", "Field not found"),
@@ -127,6 +131,13 @@ def add_stage04(story: list[Any], facts: Facts) -> None:
                         f"{limits.timeout_seconds:g} s for PDF parsing",
                     ),
                 ],
+                [
+                    mono("worker_memory_bytes"),
+                    tr(
+                        f"{limits.worker_memory_bytes // 1_048_576} МиБ (этап 09, Linux)",
+                        f"{limits.worker_memory_bytes // 1_048_576} MiB (stage 09, Linux)",
+                    ),
+                ],
             ],
             [160, W - 160],
             [CELL, CELL],
@@ -190,11 +201,13 @@ def add_stage04(story: list[Any], facts: Facts) -> None:
                 "Первая версия использовала multiprocessing со spawn: дочерний процесс "
                 "повторно импортировал главный модуль вызывающей программы и падал. "
                 "Отдельный интерпретатор с stdin/stdout устранил зависимость от того, "
-                "как запущен Python. Память процесса пока не ограничена — этап 09.",
+                "как запущен Python. С этапа 09 процесс ограничивает ещё процессор, "
+                "память (Linux) и объём текста — раздел 33.",
                 "The first version used multiprocessing spawn: the child re-imported "
                 "the caller's main module and failed. A separate interpreter with "
-                "stdin/stdout removed the dependency on how Python was started. Worker "
-                "memory is not limited yet (Stage 09).",
+                "stdin/stdout removed the dependency on how Python was started. Since "
+                "Stage 09 the worker also limits CPU, memory (Linux) and text — "
+                "section 33.",
             ),
             AMBER,
             AMBER_L,

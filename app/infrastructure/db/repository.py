@@ -19,9 +19,9 @@ from app.application.ports import (
     AuditEvent,
     CommandName,
     CommandResult,
+    DeliveryStatus,
     IdempotencyRecord,
     OutboxEvent,
-    OutboxEventType,
     StoredWorkflow,
     ValidationSnapshot,
     Versioned,
@@ -40,6 +40,7 @@ from app.infrastructure.db.models import (
     IdempotencyRecordRow,
     InvoiceLineRow,
     InvoiceVersionRow,
+    OutboxDeliveryRow,
     OutboxEventRow,
     PolicyVersionRow,
     PurchaseOrderLineRow,
@@ -586,7 +587,11 @@ class SqlAlchemyWorkflowRepository:
             )
 
     def add_outbox_event(self, event: OutboxEvent) -> None:
-        """Append an outbox event; its payload holds IDs and hashes only."""
+        """Append an event and its pending delivery; the payload has IDs only.
+
+        Both rows commit with the decision, so no event exists without a
+        delivery state the worker can find.
+        """
         self._insert(
             OutboxEventRow(
                 id=event.event_id,
@@ -594,6 +599,11 @@ class SqlAlchemyWorkflowRepository:
                 workflow_id=event.workflow_id,
                 workflow_version=event.workflow_version,
                 payload=event.payload,
+            )
+        )
+        self._insert(
+            OutboxDeliveryRow(
+                event_id=event.event_id, status=DeliveryStatus.PENDING.value
             )
         )
 
@@ -635,22 +645,3 @@ class SqlAlchemyWorkflowRepository:
                 )
                 for row in rows
             )
-
-    def list_outbox_events(self, workflow_id: str) -> tuple[OutboxEvent, ...]:
-        """Return a workflow's outbox events oldest first."""
-        rows = self._session.scalars(
-            select(OutboxEventRow)
-            .where(OutboxEventRow.workflow_id == workflow_id)
-            .order_by(OutboxEventRow.created_at, OutboxEventRow.id)
-        ).all()
-        return tuple(
-            OutboxEvent(
-                event_id=row.id,
-                event_type=OutboxEventType(row.event_type),
-                workflow_id=row.workflow_id,
-                workflow_version=row.workflow_version,
-                payload=dict(row.payload),
-                created_at=row.created_at,
-            )
-            for row in rows
-        )

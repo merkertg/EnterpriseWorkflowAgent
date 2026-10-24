@@ -2,6 +2,7 @@
 
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from types import TracebackType
 from typing import Any, Self, cast
 
@@ -27,7 +28,11 @@ from app.application.agent_protocol import (
     TurnKind,
     validate_against_schema,
 )
-from app.application.errors import MissingPermissionError, NotFoundError
+from app.application.errors import (
+    AgentRunLimitError,
+    MissingPermissionError,
+    NotFoundError,
+)
 from app.application.ports import (
     AgentRunRecord,
     AgentStepKind,
@@ -113,6 +118,16 @@ class FakeRuns:
     def get_run(self, run_id: object) -> AgentRunRecord | None:
         """Find a run by ID."""
         return next((r for r in self.runs if r.run_id == run_id), None)
+
+    def count_runs_since(self, workflow_id: str, since: datetime) -> int:
+        """Count stored runs of a workflow started since a moment."""
+        return sum(
+            1
+            for r in self.runs
+            if r.workflow_id == workflow_id
+            and r.started_at is not None
+            and r.started_at >= since
+        )
 
 
 class FakeUnit:
@@ -490,6 +505,7 @@ def test_schema_requires_closed_objects_and_known_types() -> None:
         {"provider_timeout_seconds": 0},
         {"tool_timeout_seconds": -1.0},
         {"max_result_bytes": 10},
+        {"max_runs_per_hour": 0},
     ],
 )
 def test_limits_must_be_positive(limits: dict[str, Any]) -> None:
@@ -509,3 +525,14 @@ def test_requests_carry_no_document_text_in_instructions(runs: FakeRuns) -> None
     first: ModelRequest = provider.requests[0]
     assert SECRET_TEXT not in first.system
     assert all(SECRET_TEXT not in repr(m) for m in first.messages)
+
+
+def test_hourly_quota_refuses_before_calling_the_model(runs: FakeRuns) -> None:
+    """Runs of the last hour count; the refused run calls no provider."""
+    limits = AgentLimits(max_runs_per_hour=2)
+    for _ in range(2):
+        _service([GOOD], runs, limits=limits).run("WF-1", actor=ACTOR)
+    blocked = _service([GOOD], runs, limits=limits)
+    with pytest.raises(AgentRunLimitError):
+        blocked.run("WF-1", actor=ACTOR)
+    assert len(runs.runs) == 2

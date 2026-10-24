@@ -37,6 +37,7 @@ from guide.stage05 import add_stage05
 from guide.stage06 import add_stage06
 from guide.stage07 import add_stage07
 from guide.stage08 import add_stage08
+from guide.stage09 import add_stage09
 from guide.toc import section
 
 _REMOTE = {
@@ -168,6 +169,13 @@ def _overview(story: list[Any]) -> None:
                         "Streamlit page over the HTTP API only; repeats never duplicate commands",
                     ),
                 ],
+                [
+                    "09",
+                    tr(
+                        "Подписанная доставка outbox с повторами, лимиты ресурсов, 31 оценка",
+                        "Signed outbox delivery with retries, resource limits, 31 evaluations",
+                    ),
+                ],
             ],
             [50, W - 50],
         ),
@@ -258,9 +266,21 @@ def _cheat_sheet(story: list[Any]) -> None:
             "uv run --locked --group ui python -m streamlit run ui/app.py",
             tr("Страница этапа 08", "Stage 08 page"),
         ),
+        (
+            "uv run --locked python -m sandbox.receiver",
+            tr("Получатель webhook этапа 09", "Stage 09 webhook receiver"),
+        ),
+        (
+            "... outbox_worker run | status | requeue ID",
+            tr("Доставка событий outbox", "Outbox event delivery"),
+        ),
+        (
+            "... outbox_demo; ... evals run | list",
+            tr("Демонстрация и оценки этапа 09", "Stage 09 demo and evaluations"),
+        ),
         ("uv run --locked ruff check .", tr("Линтер", "Linter")),
         (
-            "uv run --locked --group ui mypy app tests scripts migrations ui",
+            "uv run --locked --group ui mypy app tests scripts migrations ui sandbox",
             tr("Строгие типы", "Strict types"),
         ),
         (
@@ -448,6 +468,34 @@ def _common_errors(story: list[Any]) -> None:
             ),
         ),
         (
+            mono("Set SANDBOX_WEBHOOK_SECRET"),
+            tr(
+                "Один секрет 32+ символов обработчику и получателю",
+                "One 32+ character secret for worker and receiver",
+            ),
+        ),
+        (
+            tr("Все попытки http_401", "Every attempt http_401"),
+            tr(
+                "Разные секреты или часы разошлись больше 5 минут",
+                "Different secrets, or clocks over 5 minutes apart",
+            ),
+        ),
+        (
+            tr("Событие exhausted", "Event exhausted"),
+            tr(
+                "Почини получателя, затем outbox_worker requeue",
+                "Fix the receiver, then outbox_worker requeue",
+            ),
+        ),
+        (
+            mono("429 agent_run_limit"),
+            tr(
+                "Квота помощника на этот час исчерпана; подожди",
+                "The assistant's hourly quota is used up; wait",
+            ),
+        ),
+        (
             tr("Тест свежести PDF упал", "PDF freshness test failed"),
             tr(
                 "Пересобери оба PDF и проверь страницы",
@@ -551,13 +599,21 @@ def _questions(story: list[Any]) -> None:
             "Why is the idempotency key derived from the intent, not random?",
         ),
         tr(
+            "Что будет, если обработчик упадёт между отправкой и COMMIT?",
+            "What happens if the worker dies between sending and COMMIT?",
+        ),
+        tr(
+            "Почему успех всех оценок не значит готовность к эксплуатации?",
+            "Why does passing every evaluation not mean production readiness?",
+        ),
+        tr(
             "Что пока не защищено и на каком этапе это появится?",
             "What is not protected yet, and in which stage will it be?",
         ),
     ]
     for index, question in enumerate(questions, start=1):
         story.append(p(f"{index}. {question}", QUESTION))
-        story.append(Spacer(1, 16))
+        story.append(Spacer(1, 12))
 
 
 def _results(story: list[Any], verification: dict[str, Any]) -> None:
@@ -594,15 +650,15 @@ def _results(story: list[Any], verification: dict[str, Any]) -> None:
                 [
                     tr("С TEST_DATABASE_URL", "With TEST_DATABASE_URL"),
                     tr(
-                        f"{tests['with_database']['passed']} прошли, {tests['with_database']['failed']} упали, {tests['with_database']['skipped']} пропущены",
-                        f"{tests['with_database']['passed']} passed, {tests['with_database']['failed']} failed, {tests['with_database']['skipped']} skipped",
+                        f"{tests['with_database']['passed']} прошли, {tests['with_database']['failed']} упали, {tests['with_database']['skipped']} пропущены (только Linux)",
+                        f"{tests['with_database']['passed']} passed, {tests['with_database']['failed']} failed, {tests['with_database']['skipped']} skipped (Linux only)",
                     ),
                 ],
                 [
                     tr("Без базы", "Without a database"),
                     tr(
-                        f"{tests['without_database']['passed']} прошли, {tests['without_database']['skipped']} пропущены (PostgreSQL)",
-                        f"{tests['without_database']['passed']} passed, {tests['without_database']['skipped']} skipped (PostgreSQL)",
+                        f"{tests['without_database']['passed']} прошли, {tests['without_database']['skipped']} пропущены (PostgreSQL {tests['postgres']}, Linux {tests.get('platform_skipped', 0)})",
+                        f"{tests['without_database']['passed']} passed, {tests['without_database']['skipped']} skipped (PostgreSQL {tests['postgres']}, Linux {tests.get('platform_skipped', 0)})",
                     ),
                 ],
                 [tr("Всего тестов", "Total tests"), str(tests["total"])],
@@ -641,12 +697,14 @@ def _results(story: list[Any], verification: dict[str, Any]) -> None:
         Spacer(1, 6),
         callout(
             tr(
-                "Не реализовано: адаптер настоящей LLM (07 работает с подставными "
-                "провайдерами), лимит памяти PDF-процесса и доставка outbox (09), "
-                "Docker-выпуск (10). Срок действия токенов и SSO — вне объёма.",
-                "Not implemented: a real LLM adapter (07 runs substitute providers), "
-                "a PDF worker memory limit and outbox delivery (09), Docker release "
-                "(10). Token expiry and SSO are out of scope.",
+                "Не реализовано: адаптер настоящей LLM (07 и оценки работают с "
+                "подставными провайдерами), лимит памяти PDF-процесса на macOS, "
+                "доставка в настоящие системы, Docker-выпуск (10). Срок действия "
+                "токенов и SSO — вне объёма.",
+                "Not implemented: a real LLM adapter (07 and the evaluations use "
+                "substitute providers), a PDF worker memory limit on macOS, delivery "
+                "to real systems, Docker release (10). Token expiry and SSO are out "
+                "of scope.",
             ),
             GREEN,
             GREEN_L,
@@ -666,6 +724,7 @@ def build_story(facts: Facts, verification: dict[str, Any]) -> list[Any]:
     add_stage06(story, facts)
     add_stage07(story, facts)
     add_stage08(story, facts)
+    add_stage09(story, facts)
     _cheat_sheet(story)
     _common_errors(story)
     _questions(story)

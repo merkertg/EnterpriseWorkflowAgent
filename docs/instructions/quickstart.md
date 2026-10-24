@@ -55,6 +55,8 @@ use it consistently in the URLs.
 | `APP_ENV` | `development` | One of `development`, `test`, `production` |
 | `APP_DEBUG` | `false` | Local debugging; it does not grant access permissions |
 | `DATABASE_URL` | unset | `postgresql+psycopg://...` URL for migrations, command-line tools and the business API; hidden in settings output |
+| `SANDBOX_WEBHOOK_URL` | `http://127.0.0.1:8010/webhook` | The only outbox destination; must be http(s) on `127.0.0.1` or `[::1]` |
+| `SANDBOX_WEBHOOK_SECRET` | unset | Signing secret for the outbox worker (32+ characters); hidden in settings output |
 
 Environment variables override `.env`, which overrides defaults. Explicit
 `Settings(...)` constructor arguments have higher priority. Unknown `.env`
@@ -91,3 +93,9 @@ For Stage 08, install the interface with `uv sync --locked --group ui`, run
 `uv run --locked python -m app.ui_demo_setup`, start the API and then
 `uv run --locked --group ui python -m streamlit run ui/app.py`; see
 [interface](ui.md).
+
+For Stage 09, run `uv run --locked python -m app.outbox_demo` and
+`uv run --locked python -m app.evals run`, or start
+`python -m sandbox.receiver` and `python -m app.outbox_worker run` with the
+same `SANDBOX_WEBHOOK_SECRET`; see [outbox delivery](outbox.md) and
+[evaluations](evaluations.md).

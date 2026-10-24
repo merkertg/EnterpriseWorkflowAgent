@@ -88,8 +88,8 @@ _ROUTE_TEXT = {
     ("GET", "/workflows/{workflow_id}/audit"): ("view", "Аудит", "Audit trail"),
     ("GET", "/workflows/{workflow_id}/outbox"): (
         "view",
-        "События решений",
-        "Decision events",
+        "События и их доставка",
+        "Events and their delivery",
     ),
     ("POST", "/workflows/{workflow_id}/agent-runs"): (
         "assist",
@@ -483,10 +483,12 @@ def add_stage06(story: list[Any], facts: Facts) -> None:
         Spacer(1, 6),
         callout(
             tr(
-                "Доставки событий нет: обработчик с повторами и подписанным sandbox "
-                "webhook появится на этапе 09. Одобрение не запускает платёж.",
-                "Events are not delivered: a worker with retries and a signed sandbox "
-                "webhook arrives in Stage 09. Approval starts no payment.",
+                "Этап 06 событий не доставляет; обработчик с повторами и подписанным "
+                "sandbox webhook добавлен на этапе 09 (раздел 31). Одобрение не "
+                "запускает платёж.",
+                "Stage 06 delivers no events; a worker with retries and a signed "
+                "sandbox webhook was added in Stage 09 (section 31). Approval starts "
+                "no payment.",
             ),
             TEAL,
             TEAL_L,

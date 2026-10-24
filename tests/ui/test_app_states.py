@@ -50,6 +50,7 @@ class FakeClient(ApiClient):
         self.report = overrides.pop("report", None)
         self.upload_result = overrides.pop("upload_result", None)
         self.agent = overrides.pop("agent", None)
+        self.events = overrides.pop("events", [])
         self.errors: dict[str, ApiError] = overrides.pop("errors", {})
         self.sent: list[str] = []
 
@@ -90,8 +91,8 @@ class FakeClient(ApiClient):
         return []
 
     def outbox(self, workflow_id: str) -> list[dict[str, Any]]:
-        """No events."""
-        return []
+        """The configured decision events."""
+        return list(self.events)
 
     def approve(self, workflow_id: str, **kwargs: Any) -> dict[str, Any]:
         """Approve or fail as configured."""
@@ -232,3 +233,36 @@ def test_upload_refusals_and_reviews_are_shown(
     shown = " ".join(_texts(app.error) + _texts(app.info) + _texts(app.warning))
     assert expected in shown
     assert not app.exception
+
+
+def _event(status: str, attempts: int, error: str | None) -> dict[str, Any]:
+    """A decision event with the given delivery state."""
+    return {
+        "event_id": "00000000-0000-0000-0000-0000000000e1",
+        "event_type": "invoice.approved",
+        "workflow_version": 3,
+        "payload": {"decided_by": "approver-1"},
+        "delivery": {
+            "status": status,
+            "attempts": attempts,
+            "total_attempts": attempts,
+            "requeues": 0,
+            "next_attempt_at": "2026-10-24T10:00:00Z",
+            "last_error": error,
+            "last_attempt_at": None,
+            "delivered_at": None,
+        },
+        "attempts": [],
+    }
+
+
+def test_exhausted_delivery_is_an_error_with_the_next_step() -> None:
+    """The employee sees that the event did not arrive and what to do."""
+    page = _run(FakeClient(events=[_event("exhausted", 5, "http_503")]))
+    [error] = _texts(page.error)
+    assert "not delivered after 5 attempts (http_503)" in error
+    assert "outbox_worker requeue 00000000-0000-0000-0000-0000000000e1" in error
+    page = _run(FakeClient(events=[_event("retry_scheduled", 1, "timeout")]))
+    assert "attempt 1 failed (timeout)" in _texts(page.warning)[0]
+    page = _run(FakeClient(events=[_event("delivered", 1, None)]))
+    assert not page.error and not page.warning

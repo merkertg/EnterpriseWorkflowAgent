@@ -6,9 +6,10 @@ document, extract fields with source evidence, apply corporate rules, show
 discrepancies, obtain an employee's decision and record the next process step.
 All examples will use fictional data.
 
-**Current scope: Stages 01–08 — API foundation, domain, PostgreSQL storage,
+**Current scope: Stages 01–09 — API foundation, domain, PostgreSQL storage,
 document intake, deterministic reconciliation, employee decisions, a bounded
-review agent and a Streamlit interface over the HTTP API.**
+review agent, a Streamlit interface over the HTTP API, and signed outbox
+delivery with hardening and an evaluation suite.**
 The repository contains a FastAPI liveness endpoint, validated settings, exact
 money and purchasing models, seven basic validation reasons and an immutable
 workflow. Stage 03 persists it in PostgreSQL through Alembic migrations, with
@@ -28,11 +29,16 @@ checks, limits on calls, time and result size, a check of the drafted next
 step against stored facts, and a trace without document text; it runs only
 deterministic offline providers. Stage 08 adds a Streamlit page for employees
 that reaches data only through the HTTP API, with intent-derived idempotency
-keys so repeated clicks and reloads never duplicate a command. Isolated tests,
-PostgreSQL integration tests, Ruff, strict mypy, a locked environment and a
-GitHub Actions workflow cover this work. Actual results and unverified items are
-recorded in [verification](docs/VERIFICATION.md). A real model adapter,
-outbox delivery and hardening are planned.
+keys so repeated clicks and reloads never duplicate a command. Stage 09
+delivers decision events at least once to a fixed loopback sandbox receiver
+with HMAC signatures, bounded retries and delivery state visible to
+employees; it limits the PDF worker's CPU, memory (where the OS allows) and
+text, command request bodies and assistant runs, and adds 31 evaluation
+cases with explicit expected outcomes. Isolated tests, PostgreSQL integration
+tests, Ruff, strict mypy, a locked environment and a GitHub Actions workflow
+cover this work. Actual results and unverified items are recorded in
+[verification](docs/VERIFICATION.md). A real model adapter and a
+reproducible release are planned.
 
 The planned design is a modular monolith. Deterministic code calculates amounts,
 checks rules and controls state transitions. The AI assistant proposes fields and
@@ -40,8 +46,8 @@ explanations; authorized employees make approval decisions. The tutorial does no
 initiate payments or act on real corporate systems.
 
 **Visual guides:** [Russian PDF](docs/guide/enterprise-workflow-agent-guide.pdf)
-and [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf), 35 pages
-each, with diagrams for stages 01–08.
+and [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf), 38 pages
+each, with diagrams for stages 01–09.
 
 **По-русски:** основа API — [этап 01](docs/STAGE_01.md), предметная модель,
 правила и состояния — [этап 02](docs/STAGE_02.md), хранение, транзакции и
@@ -49,7 +55,8 @@ each, with diagrams for stages 01–08.
 [этап 04](docs/STAGE_04.md), сверка счёта с заказом — [этап 05](docs/STAGE_05.md),
 решение сотрудника, роли и outbox — [этап 06](docs/STAGE_06.md),
 ограниченный AI-агент — [этап 07](docs/STAGE_07.md), интерфейс Streamlit —
-[этап 08](docs/STAGE_08.md).
+[этап 08](docs/STAGE_08.md), доставка outbox, ограничения и оценки —
+[этап 09](docs/STAGE_09.md).
 Все этапы и критерии готовности — в [дорожной карте](docs/ROADMAP.md).
 
 ## Quickstart
@@ -83,8 +90,9 @@ token (see [Employee decisions and HTTP API](#employee-decisions-and-http-api))
 and otherwise answer `503`.
 
 Optional settings: `APP_NAME`, `APP_ENV` (`development`, `test`, `production`),
-`APP_DEBUG` (default `false`) and `DATABASE_URL` (Stage 03+ commands and the
-business API). They can come from an optional `.env`, based on
+`APP_DEBUG` (default `false`), `DATABASE_URL` (Stage 03+ commands and the
+business API), and `SANDBOX_WEBHOOK_URL` and `SANDBOX_WEBHOOK_SECRET` (the
+Stage 09 outbox worker). They can come from an optional `.env`, based on
 [.env.example](.env.example), or process environment variables. Explicit factory
 settings take priority, then environment variables, `.env`, and code defaults.
 `APP_ENV=production` is a validated label; it does not configure production
@@ -197,7 +205,8 @@ for a missing role, another unit, the workflow's own starter, a stale version,
 a stale or unmatched snapshot, or a forbidden transition. Order, rule and
 duplicate writers wait on the same PostgreSQL advisory locks as approval. The
 decision, an `invoice.approved` or `invoice.rejected` outbox event and the
-audit event commit together; nothing delivers events yet (Stage 09). Commands
+audit event commit together; since Stage 09 the outbox worker delivers the
+event (see [Outbox delivery](#outbox-delivery)). Commands
 need an `Idempotency-Key` header. See [decisions](docs/instructions/decisions.md)
 and [API usage](docs/instructions/usage.md).
 
@@ -240,7 +249,48 @@ source lines, reconciliation with quoted discrepancies, the assistant's draft,
 the audit trail and outbox events, and sends check, reconcile, revise,
 approve and reject commands. It never reads the database or checks business
 rules itself; refusals are shown with the server's code and a hint. Streamlit
-is in the separate `ui` dependency group. See [interface](docs/instructions/ui.md).
+is in the separate `ui` dependency group. Since Stage 09 it also shows each
+event's delivery status and an error for exhausted deliveries. See
+[interface](docs/instructions/ui.md).
+
+## Outbox delivery
+
+```bash
+export SANDBOX_WEBHOOK_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+uv run --locked python -m sandbox.receiver
+uv run --locked python -m app.outbox_worker run
+uv run --locked python -m app.outbox_worker status
+uv run --locked python -m app.outbox_demo
+```
+
+The decision's transaction also creates a `pending` delivery. The worker
+claims one due event at a time with `FOR UPDATE SKIP LOCKED`, signs the
+canonical JSON body with HMAC-SHA256 and a timestamp, sends it to
+`SANDBOX_WEBHOOK_URL` (only `127.0.0.1` or `[::1]`; no proxies, no redirects)
+and records the attempt. Failures retry after 2, 4, 8 and 16 seconds; after
+five the event is `exhausted` until an operator runs `requeue`. Delivery is
+at least once: the sandbox receiver (`sandbox/`, which imports nothing from
+`app`) verifies the signature and timestamp and takes one action per event
+ID, answering repeats as `duplicate`. The API and the page show status,
+attempts and the last error. See [outbox delivery](docs/instructions/outbox.md).
+
+## Evaluations and limits
+
+```bash
+uv run --locked python -m app.evals list
+uv run --locked python -m app.evals run
+```
+
+31 cases in nine categories (injection, wrong fields, ambiguous data, provider
+failure, timeout, retry, concurrency, malicious documents, access) state
+their expected outcome in advance; the run writes JSON and Markdown reports
+with limitations to `var/evals/`. Only deterministic providers are used, and
+passing the suite is not a claim of production readiness. Stage 09 also
+limits the PDF worker's CPU time, memory (`RLIMIT_AS`, enforced on Linux, not
+on macOS) and extracted text (`resource_limit`, `text_too_long`), refuses
+command bodies over 64 KiB or without a length (`413`, `411`), and allows 20
+assistant runs per workflow per hour (`429 agent_run_limit`). See
+[evaluations](docs/instructions/evaluations.md).
 
 ## Stages
 
@@ -254,7 +304,7 @@ is in the separate `ui` dependency group. See [interface](docs/instructions/ui.m
 | 06 | Employee approvals, roles and transactional outbox | Implemented; verified locally |
 | 07 | Bounded AI tools, demo provider and optional real model | Implemented with offline providers; no real model |
 | 08 | Streamlit interface through the HTTP API | Implemented; verified locally and in a browser |
-| 09 | Security, failure scenarios, evals and local sandbox event delivery | Planned |
+| 09 | Security, failure scenarios, evals and local sandbox event delivery | Implemented; verified locally and in a browser |
 | 10 | Docker, expanded CI and reproducible release | Planned |
 
 The [roadmap](docs/ROADMAP.md) defines the scope and acceptance criteria for each
@@ -265,13 +315,13 @@ stage. Later modules are created with their first working feature.
 ```bash
 uv run --locked ruff check .
 uv run --locked ruff format --check .
-uv run --locked --group ui mypy app tests scripts migrations ui
+uv run --locked --group ui mypy app tests scripts migrations ui sandbox
 uv run --locked --group ui pytest
 uv run --locked python scripts/check_docs.py
 ```
 
 Without `--group ui` the interface test modules are skipped. Rebuild both PDF
-guides after changing `app/`, `ui/`, migrations, `uv.lock` or
+guides after changing `app/`, `ui/`, `sandbox/`, migrations, `uv.lock` or
 `docs/guide/verification.json`; a test fails if they are stale:
 
 ```bash
@@ -291,9 +341,9 @@ not been verified.
 | Purpose | Source |
 | --- | --- |
 | Stage plan and completion criteria (RU) | [ROADMAP](docs/ROADMAP.md) |
-| Detailed learning guides (RU) | [STAGE 01](docs/STAGE_01.md), [STAGE 02](docs/STAGE_02.md), [STAGE 03](docs/STAGE_03.md), [STAGE 04](docs/STAGE_04.md), [STAGE 05](docs/STAGE_05.md), [STAGE 06](docs/STAGE_06.md), [STAGE 07](docs/STAGE_07.md), [STAGE 08](docs/STAGE_08.md) |
-| Short task instructions (EN) | [Quickstart](docs/instructions/quickstart.md), [API](docs/instructions/usage.md), [domain](docs/instructions/domain.md), [persistence](docs/instructions/persistence.md), [documents](docs/instructions/documents.md), [reconciliation](docs/instructions/reconciliation.md), [decisions](docs/instructions/decisions.md), [agent](docs/instructions/agent.md), [interface](docs/instructions/ui.md), [testing](docs/instructions/testing.md), [project structure](docs/instructions/project-structure.md) |
-| Design and decisions (EN) | [Approach](docs/APPROACH.md), [ADR 0001](docs/adr/0001-modular-monolith-and-tooling.md), [ADR 0002](docs/adr/0002-domain-rules-and-workflow.md), [ADR 0003](docs/adr/0003-postgresql-persistence-audit-idempotency.md), [ADR 0004](docs/adr/0004-document-intake-and-field-provenance.md), [ADR 0005](docs/adr/0005-deterministic-reconciliation.md), [ADR 0006](docs/adr/0006-employee-decisions-and-outbox.md), [ADR 0007](docs/adr/0007-bounded-review-agent.md), [ADR 0008](docs/adr/0008-streamlit-client-over-http.md) |
+| Detailed learning guides (RU) | [STAGE 01](docs/STAGE_01.md), [STAGE 02](docs/STAGE_02.md), [STAGE 03](docs/STAGE_03.md), [STAGE 04](docs/STAGE_04.md), [STAGE 05](docs/STAGE_05.md), [STAGE 06](docs/STAGE_06.md), [STAGE 07](docs/STAGE_07.md), [STAGE 08](docs/STAGE_08.md), [STAGE 09](docs/STAGE_09.md) |
+| Short task instructions (EN) | [Quickstart](docs/instructions/quickstart.md), [API](docs/instructions/usage.md), [domain](docs/instructions/domain.md), [persistence](docs/instructions/persistence.md), [documents](docs/instructions/documents.md), [reconciliation](docs/instructions/reconciliation.md), [decisions](docs/instructions/decisions.md), [agent](docs/instructions/agent.md), [interface](docs/instructions/ui.md), [outbox delivery](docs/instructions/outbox.md), [evaluations](docs/instructions/evaluations.md), [testing](docs/instructions/testing.md), [project structure](docs/instructions/project-structure.md) |
+| Design and decisions (EN) | [Approach](docs/APPROACH.md), [ADR 0001](docs/adr/0001-modular-monolith-and-tooling.md), [ADR 0002](docs/adr/0002-domain-rules-and-workflow.md), [ADR 0003](docs/adr/0003-postgresql-persistence-audit-idempotency.md), [ADR 0004](docs/adr/0004-document-intake-and-field-provenance.md), [ADR 0005](docs/adr/0005-deterministic-reconciliation.md), [ADR 0006](docs/adr/0006-employee-decisions-and-outbox.md), [ADR 0007](docs/adr/0007-bounded-review-agent.md), [ADR 0008](docs/adr/0008-streamlit-client-over-http.md), [ADR 0009](docs/adr/0009-outbox-delivery-and-evaluations.md) |
 | CI explanation (RU) | [CI/CD](docs/CI_CD.md) |
 | Work completed and check evidence (RU) | [Development log](docs/DEVELOPMENT_LOG.md), [verification](docs/VERIFICATION.md) |
 | Visual PDF guides (RU and EN) | [Russian PDF](docs/guide/enterprise-workflow-agent-guide.pdf), [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf), [how they are built](docs/guide/README.md) |

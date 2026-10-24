@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.infrastructure.db.agent_runs import SqlAlchemyAgentRunRepository
 from app.infrastructure.db.documents import SqlAlchemyDocumentRepository
+from app.infrastructure.db.outbox import SqlAlchemyOutboxRepository
 from app.infrastructure.db.reconciliations import SqlAlchemyReconciliationRepository
 from app.infrastructure.db.repository import SqlAlchemyWorkflowRepository
 from app.infrastructure.db.users import SqlAlchemyUserRepository
@@ -24,6 +25,7 @@ class SqlAlchemyUnitOfWork:
         self._reconciliations: SqlAlchemyReconciliationRepository | None = None
         self._users: SqlAlchemyUserRepository | None = None
         self._agent_runs: SqlAlchemyAgentRunRepository | None = None
+        self._outbox: SqlAlchemyOutboxRepository | None = None
 
     @property
     def repository(self) -> SqlAlchemyWorkflowRepository:
@@ -60,6 +62,13 @@ class SqlAlchemyUnitOfWork:
             raise RuntimeError("Use the unit of work inside a with block.")
         return self._agent_runs
 
+    @property
+    def outbox(self) -> SqlAlchemyOutboxRepository:
+        """Return the outbox delivery repository sharing this transaction."""
+        if self._outbox is None:
+            raise RuntimeError("Use the unit of work inside a with block.")
+        return self._outbox
+
     def __enter__(self) -> Self:
         """Start a session; SQLAlchemy begins the transaction on first use."""
         self._session = self._session_factory()
@@ -68,6 +77,7 @@ class SqlAlchemyUnitOfWork:
         self._reconciliations = SqlAlchemyReconciliationRepository(self._session)
         self._users = SqlAlchemyUserRepository(self._session)
         self._agent_runs = SqlAlchemyAgentRunRepository(self._session)
+        self._outbox = SqlAlchemyOutboxRepository(self._session)
         return self
 
     def __exit__(
@@ -86,6 +96,7 @@ class SqlAlchemyUnitOfWork:
         self._reconciliations = None
         self._users = None
         self._agent_runs = None
+        self._outbox = None
 
     def commit(self) -> None:
         """Commit every write made through this unit's repository."""

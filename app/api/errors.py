@@ -12,6 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.application.errors import (
+    AgentRunLimitError,
     ApplicationError,
     ConcurrentWriteError,
     IdempotencyKeyReusedError,
@@ -58,6 +59,7 @@ ERROR_STATUS: tuple[tuple[type[ApplicationError], int], ...] = (
     (ReconciliationNotMatchedError, 409),
     (ReconciliationNotForWorkflowError, 422),
     (DocumentTooLargeError, 413),
+    (AgentRunLimitError, 429),
     (DatabaseNotConfiguredError, 503),
     (StoredDataIntegrityError, 500),
 )

@@ -11,6 +11,7 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from app import __version__
 from app.api.dependencies import Services
 from app.api.errors import install_error_handlers
+from app.api.limits import MAX_JSON_BODY_BYTES, BodySizeLimit
 from app.api.routes.business import router as business_router
 from app.api.routes.health import router as health_router
 from app.config import Settings, get_settings
@@ -95,6 +96,12 @@ def create_app(
     application.state.settings = resolved_settings
     application.state.services = services
     install_error_handlers(application)
+    # Uploads stream with their own limit; other bodies are small JSON commands.
+    application.add_middleware(
+        BodySizeLimit,
+        limit=MAX_JSON_BODY_BYTES,
+        exempt_paths=frozenset({"/documents"}),
+    )
     application.add_exception_handler(OperationalError, _database_unavailable)
     application.add_exception_handler(ProgrammingError, _database_unavailable)
     application.include_router(health_router)

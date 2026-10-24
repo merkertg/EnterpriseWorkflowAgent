@@ -165,7 +165,7 @@ class OutboxEventType(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class OutboxEvent:
-    """An event stored with the decision; delivery is Stage 09 work."""
+    """An event stored with the decision; the outbox worker delivers it later."""
 
     event_id: UUID
     event_type: OutboxEventType
@@ -173,6 +173,63 @@ class OutboxEvent:
     workflow_version: int
     payload: dict[str, Any]
     created_at: datetime | None = None
+
+
+class DeliveryStatus(StrEnum):
+    """Where an outbox event is on its way to the sandbox receiver."""
+
+    PENDING = "pending"
+    RETRY_SCHEDULED = "retry_scheduled"
+    DELIVERED = "delivered"
+    EXHAUSTED = "exhausted"
+
+
+class AttemptOutcome(StrEnum):
+    """Result of one delivery attempt."""
+
+    DELIVERED = "delivered"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryAttempt:
+    """One logged attempt: status code or error code, timing, duplicate flag."""
+
+    seq: int
+    started_at: datetime
+    duration_ms: int
+    outcome: AttemptOutcome
+    http_status: int | None
+    error_code: str | None
+    duplicate: bool | None
+
+
+@dataclass(frozen=True, slots=True)
+class OutboxDelivery:
+    """Mutable delivery state of one event.
+
+    ``attempts`` counts the current round and decides exhaustion;
+    ``total_attempts`` counts every attempt, including rounds before a requeue.
+    """
+
+    event_id: UUID
+    status: DeliveryStatus
+    attempts: int
+    total_attempts: int
+    requeues: int
+    next_attempt_at: datetime
+    last_error: str | None
+    last_attempt_at: datetime | None
+    delivered_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class OutboxEntry:
+    """An event with its delivery state and attempt log, for reading."""
+
+    event: OutboxEvent
+    delivery: OutboxDelivery
+    attempts: tuple[DeliveryAttempt, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -328,11 +385,7 @@ class WorkflowRepository(Protocol):
         ...
 
     def add_outbox_event(self, event: OutboxEvent) -> None:
-        """Append an outbox event in the current transaction."""
-        ...
-
-    def list_outbox_events(self, workflow_id: str) -> tuple[OutboxEvent, ...]:
-        """Return a workflow's outbox events in creation order."""
+        """Append an outbox event and its pending delivery in this transaction."""
         ...
 
 
@@ -587,6 +640,55 @@ class AgentRunRepository(Protocol):
         """Return a run and its ordered steps."""
         ...
 
+    def count_runs_since(self, workflow_id: str, since: datetime) -> int:
+        """Count a workflow's runs that started at or after ``since``."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryUpdate:
+    """New delivery state written together with one attempt."""
+
+    status: DeliveryStatus
+    next_attempt_at: datetime
+    error_code: str | None
+
+
+class OutboxRepository(Protocol):
+    """Delivery state and attempt log of outbox events."""
+
+    def claim_due(self, now: datetime) -> tuple[OutboxEvent, OutboxDelivery] | None:
+        """Lock the oldest due event; rows locked by other workers are skipped."""
+        ...
+
+    def record_attempt(
+        self, event_id: UUID, attempt: DeliveryAttempt, change: DeliveryUpdate
+    ) -> None:
+        """Append the attempt and move the delivery to its new state."""
+        ...
+
+    def list_entries(self, workflow_id: str) -> tuple[OutboxEntry, ...]:
+        """Return a workflow's events with delivery state and attempts."""
+        ...
+
+    def get_entry(self, event_id: UUID) -> OutboxEntry | None:
+        """Return one event with its delivery state and attempts."""
+        ...
+
+    def requeue(self, event_id: UUID, now: datetime) -> bool:
+        """Start a new round for an exhausted event; False if not exhausted."""
+        ...
+
+    def count_by_status(self) -> dict[DeliveryStatus, int]:
+        """Count deliveries per status."""
+        ...
+
+    def list_by_status(
+        self, status: DeliveryStatus, limit: int
+    ) -> tuple[OutboxEntry, ...]:
+        """Return the oldest entries in one status."""
+        ...
+
 
 class UnitOfWork(Protocol):
     """One transaction: commit explicitly, otherwise leaving the block rolls back."""
@@ -614,6 +716,11 @@ class UnitOfWork(Protocol):
     @property
     def agent_runs(self) -> AgentRunRepository:
         """Return the agent-run repository bound to the same transaction."""
+        ...
+
+    @property
+    def outbox(self) -> OutboxRepository:
+        """Return the outbox delivery repository bound to the same transaction."""
         ...
 
     def __enter__(self) -> Self:

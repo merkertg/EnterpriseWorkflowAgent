@@ -1,5 +1,7 @@
 """Engine construction, the test-database guard and service composition."""
 
+from collections.abc import Callable
+from datetime import datetime
 from functools import partial
 
 from sqlalchemy import URL, Engine, create_engine, make_url
@@ -9,6 +11,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.application.agent import AgentLimits, AgentService
 from app.application.agent_protocol import ModelProvider
 from app.application.agent_tools import WorkflowToolBox
+from app.application.delivery import (
+    DeliveryPolicy,
+    OutboxDeliveryService,
+    WebhookSender,
+)
 from app.application.documents import DocumentService
 from app.application.ports import FieldExtractor
 from app.application.reconciliation import ReconciliationService
@@ -100,3 +107,20 @@ def build_agent_service(
     """Compose the review agent with read-only tools over this database."""
     unit_of_work = partial(SqlAlchemyUnitOfWork, create_session_factory(engine))
     return AgentService(provider, WorkflowToolBox(unit_of_work), unit_of_work, limits)
+
+
+def build_delivery_service(
+    engine: Engine,
+    sender: WebhookSender,
+    secret: str,
+    policy: DeliveryPolicy | None = None,
+    clock: Callable[[], datetime] | None = None,
+) -> OutboxDeliveryService:
+    """Compose the outbox worker; the sender already holds the fixed URL."""
+    return OutboxDeliveryService(
+        partial(SqlAlchemyUnitOfWork, create_session_factory(engine)),
+        sender,
+        secret,
+        policy,
+        clock,
+    )

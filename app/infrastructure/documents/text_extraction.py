@@ -2,7 +2,8 @@
 
 PDF parsing runs in a fresh ``python -I`` process with a hard timeout. A
 hostile or broken PDF can then neither hang the caller nor keep running: the
-child is killed when the limit is reached.
+child is killed when the limit is reached. The worker also caps its own CPU
+time, its address space where the OS allows it, and the text it returns.
 """
 
 import json
@@ -26,6 +27,8 @@ _PDF_MESSAGES = {
     RejectionCode.ENCRYPTED_PDF: "Encrypted PDFs are not supported.",
     RejectionCode.TOO_MANY_PAGES: "The PDF has too many pages.",
     RejectionCode.MALFORMED_PDF: "The PDF could not be read.",
+    RejectionCode.TEXT_TOO_LONG: "The PDF's text exceeds the length limit.",
+    RejectionCode.RESOURCE_LIMIT: "Reading the PDF exceeded the memory or CPU limit.",
 }
 
 
@@ -47,7 +50,13 @@ def _pdf_pages(
     """Send PDF bytes to the worker and translate its JSON answer."""
     try:
         completed = subprocess.run(
-            [*command, str(limits.max_pages)],
+            [
+                *command,
+                str(limits.max_pages),
+                str(limits.max_text_chars),
+                str(limits.worker_memory_bytes),
+                str(limits.worker_cpu_seconds),
+            ],
             input=content,
             capture_output=True,
             timeout=limits.timeout_seconds,
@@ -58,6 +67,12 @@ def _pdf_pages(
             RejectionCode.PROCESSING_TIMEOUT,
             f"Processing took longer than {limits.timeout_seconds} seconds.",
         ) from error
+    if completed.returncode < 0:
+        # Killed by a signal: SIGXCPU at the CPU limit, SIGKILL from the OS.
+        raise DocumentRejectedError(
+            RejectionCode.RESOURCE_LIMIT,
+            _PDF_MESSAGES[RejectionCode.RESOURCE_LIMIT],
+        )
     try:
         answer = json.loads(completed.stdout)
     except ValueError as error:

@@ -4,6 +4,7 @@ Format is detected from content, never from a file name. Document text is data:
 nothing here interprets it as instructions.
 """
 
+import math
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -41,6 +42,7 @@ class RejectionCode(StrEnum):
     MALFORMED_PDF = "malformed_pdf"
     NO_TEXT_LAYER = "no_text_layer"
     PROCESSING_TIMEOUT = "processing_timeout"
+    RESOURCE_LIMIT = "resource_limit"
 
 
 class DocumentRejectedError(Exception):
@@ -60,10 +62,12 @@ class DocumentLimits:
     max_pages: int = 20
     max_text_chars: int = 200_000
     timeout_seconds: float = 5.0
+    # Address space of the PDF worker; enforced where the OS supports RLIMIT_AS.
+    worker_memory_bytes: int = 536_870_912
 
     def __post_init__(self) -> None:
         """Reject zero, negative and non-numeric limits."""
-        for name in ("max_bytes", "max_pages", "max_text_chars"):
+        for name in ("max_bytes", "max_pages", "max_text_chars", "worker_memory_bytes"):
             value = getattr(self, name)
             if type(value) is not int or value < 1:
                 raise DomainValidationError(
@@ -75,6 +79,11 @@ class DocumentLimits:
             raise DomainValidationError(
                 "invalid_limit", "timeout_seconds", "Use a timeout of 0–60 seconds."
             )
+
+    @property
+    def worker_cpu_seconds(self) -> int:
+        """CPU time for the worker: the wall-clock timeout, rounded up."""
+        return max(1, math.ceil(self.timeout_seconds))
 
 
 def check_size(content: bytes, limits: DocumentLimits) -> None:

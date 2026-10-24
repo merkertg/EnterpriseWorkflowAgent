@@ -27,6 +27,7 @@ from ui.client import DEFAULT_API_URL, ApiClient, ApiError  # noqa: E402
 from ui.keys import command_key  # noqa: E402
 from ui.presenters import (  # noqa: E402
     audit_rows,
+    delivery_notices,
     describe_error,
     discrepancy_rows,
     extracted_value,
@@ -280,8 +281,13 @@ def workflow_detail(client: ApiClient, me: dict[str, Any], workflow_id: str) -> 
         return
     st.dataframe(audit_rows(audit), hide_index=True)
     if outbox:
-        st.caption("Decision events (not delivered until Stage 09):")
+        st.caption("Decision events and their delivery to the sandbox receiver:")
         st.dataframe(outbox_rows(outbox), hide_index=True)
+        for level, text in delivery_notices(outbox):
+            if level == "error":
+                st.error(text)
+            else:
+                st.warning(text)
 
 
 def pin_latest_order(client: ApiClient, workflow: dict[str, Any], version: int) -> None:

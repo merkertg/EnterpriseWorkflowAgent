@@ -64,7 +64,7 @@ jobs:
         run: uv run --locked ruff format --check .
 
       - name: Check types
-        run: uv run --locked --group ui mypy app tests scripts migrations ui
+        run: uv run --locked --group ui mypy app tests scripts migrations ui sandbox
 
       - name: Apply migrations to the test database
         run: uv run --locked alembic upgrade head

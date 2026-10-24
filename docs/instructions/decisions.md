@@ -75,7 +75,8 @@ wait for an approval in progress instead of invalidating it unseen.
 version, and a JSON payload with IDs, hashes, the business unit and the
 deciding user; it never contains document text. The decision's audit event
 references the outbox event and, for approvals, the reconciliation snapshot.
-Nothing delivers events yet; delivery with retries is Stage 09.
+Since Stage 09 the outbox worker delivers events to the sandbox receiver;
+see [outbox delivery](outbox.md).
 
 ## Demonstration
 
@@ -103,5 +104,6 @@ they run as an internal tool with no access check.
 ## Limits
 
 No token expiry, rotation, SSO or rate limiting; no command to change a
-user's roles; documents are not tied to a unit; the starter may reject; no
-outbox delivery. See [verification](../VERIFICATION.md).
+user's roles; documents are not tied to a unit; the starter may reject;
+events reach only the local sandbox receiver. See
+[verification](../VERIFICATION.md).

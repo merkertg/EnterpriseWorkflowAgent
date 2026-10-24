@@ -8,13 +8,13 @@ Run from the repository root:
 uv sync --locked --group ui
 uv run --locked ruff check .
 uv run --locked ruff format --check .
-uv run --locked --group ui mypy app tests scripts migrations ui
+uv run --locked --group ui mypy app tests scripts migrations ui sandbox
 uv run --locked --group ui pytest
 uv run --locked python scripts/check_docs.py
 ```
 
 The `ui` group installs Streamlit for the Stage 08 interface. Without it,
-`uv run --locked mypy app tests scripts migrations` and `uv run --locked
+`uv run --locked mypy app tests scripts migrations sandbox` and `uv run --locked
 pytest` still work: the two interface test modules that need Streamlit are
 reported as skipped modules, so read the pytest summary.
 
@@ -133,9 +133,26 @@ with one outbox event, rights, staleness and recovery, a document
 instruction and the assistant. API tests cover the new workflow list and
 document endpoints; the setup command runs twice in separate processes.
 
+Stage 09 tests without a database cover signing and canonical bodies,
+backoff, exhaustion and requeue on an in-memory outbox, unsafe retry
+policies, the webhook sender over real loopback HTTP (2xx with the
+duplicate flag, 503, wrong secret, timeout, closed port, refused redirect,
+ignored proxy variables, non-loopback URLs), the receiver's size, header,
+timestamp, signature, body and conflict checks and failure modes, settings
+validation of the URL and secret, 411/413 for command bodies, the PDF
+worker's reported limits, text cap, CPU limit and signal deaths, the agent's
+hourly quota, the page's delivery notices and the evaluation catalogue and
+report. With PostgreSQL they cover delivery through the API, a crash after
+sending (no loss, one receiver action), `SKIP LOCKED` between two workers,
+exhaustion, requeue and counts, the append-only attempt log, the migration
+back-fill, the quota with `429`, the worker CLI and demo in separate
+processes, the full evaluation suite and an exhausted delivery shown on the
+page. The memory-limit test runs only on Linux and is reported as skipped
+elsewhere.
+
 `tests/test_guide_pdfs.py` checks both PDF guides with pypdf: the source
 fingerprint stored in each PDF must match a fresh hash of the generator,
-`docs/guide/verification.json`, `app/`, `ui/`, migrations and `uv.lock`; every section
+`docs/guide/verification.json`, `app/`, `ui/`, `sandbox/`, migrations and `uv.lock`; every section
 title must be present; the English guide must contain no Cyrillic. If it
 fails, rebuild with `uv run --locked --group guide python scripts/build_guide.py`
 and inspect every page as described in the [guide README](../guide/README.md).

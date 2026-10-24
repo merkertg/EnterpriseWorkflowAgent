@@ -23,7 +23,7 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 from uuid import UUID, uuid4
 
@@ -44,7 +44,11 @@ from app.application.agent_protocol import (
     UserMessage,
     validate_against_schema,
 )
-from app.application.errors import ApplicationError, NotFoundError
+from app.application.errors import (
+    AgentRunLimitError,
+    ApplicationError,
+    NotFoundError,
+)
 from app.application.ports import (
     AgentRunRecord,
     AgentStep,
@@ -56,6 +60,8 @@ from app.application.ports import (
 from app.domain.errors import DomainValidationError
 from app.domain.models import validate_text
 from app.domain.workflow import WorkflowState
+
+_HOUR = timedelta(hours=1)
 
 SYSTEM_PROMPT = (
     "You assist an employee who reviews a fictional supplier invoice workflow. "
@@ -107,10 +113,18 @@ class AgentLimits:
     provider_timeout_seconds: float = 20.0
     tool_timeout_seconds: float = 5.0
     max_result_bytes: int = 8192
+    # Stage 09: runs per workflow in a sliding hour, so repeated clicks or a
+    # script cannot call the model without bound.
+    max_runs_per_hour: int = 20
 
     def __post_init__(self) -> None:
         """Reject zero or negative limits."""
-        for name in ("max_provider_calls", "max_tool_calls", "max_refused_calls"):
+        for name in (
+            "max_provider_calls",
+            "max_tool_calls",
+            "max_refused_calls",
+            "max_runs_per_hour",
+        ):
             value = getattr(self, name)
             if type(value) is not int or value < 1:
                 raise DomainValidationError(
@@ -256,6 +270,20 @@ class AgentService:
         """The provider label recorded in every run."""
         return self._provider.name
 
+    def _check_quota(self, workflow_id: str, now: datetime) -> None:
+        """Refuse a run once the workflow used its hourly quota.
+
+        The count is read without a lock, so two simultaneous requests may
+        both pass at the boundary; the quota bounds cost, it is not a lock.
+        """
+        with self._unit_of_work() as unit:
+            used = unit.agent_runs.count_runs_since(workflow_id, now - _HOUR)
+        if used >= self._limits.max_runs_per_hour:
+            raise AgentRunLimitError(
+                f"The assistant ran {used} times for this workflow in the last "
+                "hour; try again later."
+            )
+
     def run(self, workflow_id: str, *, actor: Principal) -> AgentRunResult:
         """Review one workflow for an authorized employee and store the trace."""
         workflow_id = validate_text(workflow_id, "workflow_id")
@@ -263,6 +291,7 @@ class AgentService:
             raise DomainValidationError("invalid_type", "actor", "Use a Principal.")
         self._toolbox.authorize_run(workflow_id, actor)
         started_at = datetime.now(UTC)
+        self._check_quota(workflow_id, started_at)
         run = _Run(started=time.monotonic())
         executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="agent")
         try:

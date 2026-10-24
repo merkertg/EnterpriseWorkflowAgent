@@ -4,7 +4,7 @@
 
 Keep the initial application small and add a layer when it owns real behavior.
 
-## Implemented in Stages 01–08
+## Implemented in Stages 01–09
 
 | Location | Responsibility |
 | --- | --- |
@@ -38,18 +38,22 @@ Keep the initial application small and add a layer when it owns real behavior.
 | `app/application/agent_tools.py` | Four read-only agent tools with per-call rights checks |
 | `app/application/documents.py` | `prepare_document`, `DocumentService`: intake, storage and evidence |
 | `app/application/reconciliation.py` | `ReconciliationService`: snapshots, inputs hash, freshness, reproduction, reports |
+| `app/application/delivery.py` | Retry policy, webhook signing, sender port and `OutboxDeliveryService` |
 | `app/infrastructure/db/models.py` | SQLAlchemy tables, `NUMERIC` columns and check constraints |
 | `app/infrastructure/db/repository.py` | PostgreSQL workflow repository and hash verification |
 | `app/infrastructure/db/documents.py` | PostgreSQL document repository |
 | `app/infrastructure/db/reconciliations.py` | PostgreSQL storage for rule versions and reconciliation snapshots |
 | `app/infrastructure/db/users.py` | PostgreSQL storage for employees and token hashes |
 | `app/infrastructure/db/agent_runs.py` | PostgreSQL storage for agent runs and trace steps |
+| `app/infrastructure/db/outbox.py` | Delivery claims with `SKIP LOCKED`, attempt log, requeue and counts |
 | `app/infrastructure/db/inserts.py` | Immediate inserts and constraint-race translation |
 | `app/infrastructure/db/unit_of_work.py` | One session per command, shared by all repositories |
 | `app/infrastructure/documents/` | Text decoding and the isolated `python -I` PDF worker |
 | `app/infrastructure/extraction/labeled_text.py` | Deterministic `Label: value` field extractor |
 | `app/infrastructure/extraction/model_fields.py` | `ModelFieldExtractor`: fields proposed by a model provider |
 | `app/infrastructure/llm/` | Deterministic providers: `DemoRulesProvider`, `ScriptedProvider` |
+| `app/infrastructure/webhook/sender.py` | Standard-library webhook sender: loopback URL, no proxy, no redirects |
+| `app/api/limits.py` | Content-Length check for command bodies (411/413) |
 | `app/infrastructure/db/session.py` | URL validation, test-database guard, engine and service composition |
 | `app/persistence_demo.py` | Fictional PostgreSQL scenario and `show` command |
 | `app/samples.py` | Fictional text/PDF samples and a deterministic minimal PDF writer |
@@ -59,6 +63,11 @@ Keep the initial application small and add a layer when it owns real behavior.
 | `app/decisions_demo.py` | Fictional Stage 06 decision scenario and `show` |
 | `app/agent_demo.py` | Fictional offline Stage 07 agent scenarios and `show` |
 | `app/ui_demo_setup.py` | Fictional employees, tokens, reference data and samples for the interface |
+| `app/fictional_desk.py` | Shared fictional employees, reference data and steps for demos and evaluations |
+| `app/outbox_worker.py` | Delivery worker `run`, `status` and `requeue` |
+| `app/outbox_demo.py` | Fictional Stage 09 delivery scenarios with a shifted clock |
+| `app/evals/` | Evaluation cases, context, runner, reports and `python -m app.evals` |
+| `sandbox/receiver.py` | Fictional signed-webhook receiver on SQLite; imports nothing from `app` |
 | `ui/app.py` | Streamlit page: sign-in, workflows, new invoice, actions, assistant, history |
 | `ui/client.py` | Standard-library HTTP client with a replaceable transport and `ApiError` |
 | `ui/keys.py` | Idempotency keys derived from the user's intent |
@@ -72,7 +81,7 @@ Keep the initial application small and add a layer when it owns real behavior.
 | `.github/workflows/ci.yml` | Automated check configuration |
 | `pyproject.toml`, `uv.lock` | Dependencies, tooling and reproducible resolution |
 | `.python-version` | Python 3.12 interpreter selection |
-| `.env.example` | Non-secret configuration example, including a commented `DATABASE_URL` |
+| `.env.example` | Non-secret configuration example, including commented `DATABASE_URL` and sandbox webhook settings |
 | `.gitattributes` | Marks generated PDFs as binary so diffs and whitespace checks skip them |
 
 The liveness flow is `client → Uvicorn → FastAPI → health() → HealthResponse
@@ -102,6 +111,9 @@ and services; without `DATABASE_URL` business endpoints answer 503.
 | `docs/instructions/agent.md` | Agent provider port, tools, limits, draft check, traces and demo |
 | `docs/STAGE_08.md` | Streamlit interface, HTTP client, repeated clicks and errors walkthrough in Russian |
 | `docs/instructions/ui.md` | Running the interface, pages, keys, errors and tests |
+| `docs/STAGE_09.md` | Outbox delivery, hardening and evaluations walkthrough in Russian |
+| `docs/instructions/outbox.md` | Delivery worker, receiver, signature, states and commands |
+| `docs/instructions/evaluations.md` | Evaluation categories, commands, reports and limits |
 | `docs/instructions/` | Short operational instructions in English |
 | `docs/CI_CD.md` | CI configuration and limits of remote verification |
 | `docs/VERIFICATION.md` | Recorded command outcomes and limitations |
@@ -115,8 +127,8 @@ directories to create now:
 
 | Location | Add when needed for |
 | --- | --- |
-| `app/infrastructure/` (other adapters) | A real model provider adapter and outbox delivery |
-| `evals/` | Versioned evaluation cases and independent expected results |
+| `app/infrastructure/llm/` (other adapters) | A real model provider adapter |
+| `Dockerfile`, `compose.yaml` | Stage 10 reproducible local release |
 
 The persistence flow is `WorkflowService → UnitOfWork → SqlAlchemyWorkflowRepository
 → PostgreSQL`; domain functions compute every transition before anything is

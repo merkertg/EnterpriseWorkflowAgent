@@ -81,6 +81,14 @@ _TABLE_TEXT = {
         "Событие решения для следующего шага (этап 06)",
         "Decision event for the next step (stage 06)",
     ),
+    "outbox_deliveries": (
+        "Статус доставки события, попытки (этап 09)",
+        "Delivery status of an event, attempts (stage 09)",
+    ),
+    "outbox_attempts": (
+        "Журнал попыток доставки: коды, время (этап 09)",
+        "Delivery attempt log: codes, timing (stage 09)",
+    ),
     "agent_runs": (
         "Запуск агента: итог, счётчики, хеш объяснения (этап 07)",
         "Agent run: outcome, counters, explanation hash (stage 07)",

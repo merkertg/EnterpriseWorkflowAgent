@@ -1,8 +1,9 @@
 """SQLAlchemy storage for finished agent runs and their traces."""
 
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.application.ports import (
@@ -110,3 +111,17 @@ class SqlAlchemyAgentRunRepository:
                 started_at=row.started_at,
                 finished_at=row.finished_at,
             )
+
+    def count_runs_since(self, workflow_id: str, since: datetime) -> int:
+        """Count runs of one workflow that started at or after ``since``."""
+        return int(
+            self._session.scalar(
+                select(func.count())
+                .select_from(AgentRunRow)
+                .where(
+                    AgentRunRow.workflow_id == workflow_id,
+                    AgentRunRow.started_at >= since,
+                )
+            )
+            or 0
+        )

@@ -10,11 +10,15 @@ from sqlalchemy import Engine, inspect, text
 from sqlalchemy.exc import DBAPIError
 
 from app.application.access import Principal
+from app.application.delivery import WebhookMessage, WebhookResponse
 from app.application.documents import DocumentService
 from app.application.reconciliation import ReconciliationService
 from app.application.workflows import WorkflowService
 from app.infrastructure.db.models import APPEND_ONLY_TABLES, Base
-from app.infrastructure.db.session import build_agent_service
+from app.infrastructure.db.session import (
+    build_agent_service,
+    build_delivery_service,
+)
 from app.infrastructure.llm.demo import DemoRulesProvider
 from app.samples import clean_invoice_text
 from tests.persistence.conftest import (
@@ -107,6 +111,8 @@ def test_history_tables_reject_update_and_delete(
         actor=approver,
         context=context("reject"),
     )
+    # A failed delivery attempt writes the attempt log.
+    build_delivery_service(engine, _Unavailable(), "s" * 32).deliver_due()
     for statement in (f"UPDATE {table} SET {_column(table)}", f"DELETE FROM {table}"):
         with pytest.raises(DBAPIError, match="append-only"), engine.begin() as conn:
             conn.execute(text(statement))
@@ -124,6 +130,14 @@ def test_database_rejects_values_outside_domain_rules(engine: Engine) -> None:
                     f"'{'a' * 64}', 'S', 'P', 'GBP', 1.00)"
                 )
             )
+
+
+class _Unavailable:
+    """A receiver that is always down."""
+
+    def send(self, message: WebhookMessage, timeout_seconds: float) -> WebhookResponse:
+        """Answer 503 without sending anything."""
+        return WebhookResponse(503, "http_503")
 
 
 def _column(table: str) -> str:

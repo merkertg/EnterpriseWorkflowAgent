@@ -350,9 +350,9 @@ def audit_trail(
 def outbox_events(
     workflow_id: WorkflowId, services: ServicesDep, principal: PrincipalDep
 ) -> list[OutboxEventResponse]:
-    """List decision events waiting for a future delivery worker."""
-    events = services.workflows.outbox_events(workflow_id, actor=principal)
-    return [OutboxEventResponse.of(event) for event in events]
+    """List decision events with delivery state and every attempt."""
+    entries = services.workflows.outbox_events(workflow_id, actor=principal)
+    return [OutboxEventResponse.of(entry) for entry in entries]
 
 
 @router.post(
