@@ -6,11 +6,13 @@ PDF cannot drift from enums, limits, tables, migrations or locked versions.
 
 import ast
 import json
+import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from app import __version__
 from app.api.errors import ERROR_STATUS
 from app.api.limits import MAX_JSON_BODY_BYTES
 from app.api.routes.business import router as business_router
@@ -27,6 +29,8 @@ from app.application.ports import (
     OutboxEventType,
 )
 from app.application.reconciliation import StaleReason
+from app.backup import FORMAT as BACKUP_FORMAT
+from app.backup import late_columns
 from app.domain.documents import DocumentLimits, RejectionCode
 from app.domain.extraction import (
     HEADER_FIELDS,
@@ -43,6 +47,8 @@ from app.infrastructure.extraction.labeled_text import EXTRACTOR_NAME
 from ui.presenters import ERROR_HINTS
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# Top-level service names in compose.yaml, read without a YAML library.
+_SERVICE = re.compile(r"^  ([a-z]+):$", re.M)
 SHOWN_PACKAGES = (
     "fastapi",
     "pydantic",
@@ -96,6 +102,11 @@ class Facts:
     delivery_statuses: tuple[str, ...]
     json_body_limit: int
     eval_categories: tuple[tuple[str, int], ...]
+    version: str
+    compose_services: tuple[str, ...]
+    ci_jobs: tuple[str, ...]
+    backup_format: str
+    deferred_keys: tuple[str, ...]
 
 
 def read_source(relative: str) -> str:
@@ -182,7 +193,27 @@ def load_facts() -> Facts:
             (category.value, sum(1 for item in CASES if item.category is category))
             for category in Category
         ),
+        version=__version__,
+        compose_services=_compose_services(),
+        ci_jobs=tuple(
+            _SERVICE.findall(
+                "\n" + read_source(".github/workflows/ci.yml").split("\njobs:\n", 1)[1]
+            )
+        ),
+        backup_format=BACKUP_FORMAT,
+        deferred_keys=tuple(
+            f"{table}.{column}"
+            for table, columns in sorted(late_columns().items())
+            for column in sorted(columns)
+        ),
     )
+
+
+def _compose_services() -> tuple[str, ...]:
+    """Service names between ``services:`` and ``volumes:`` in compose.yaml."""
+    text = read_source("compose.yaml")
+    block = text.split("\nservices:\n", 1)[1].split("\nvolumes:\n", 1)[0]
+    return tuple(_SERVICE.findall("\n" + block))
 
 
 def _non_negative_int(value: object, name: str) -> int:

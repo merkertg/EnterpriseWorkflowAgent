@@ -81,3 +81,127 @@ jobs:
 
       - name: Check documentation links
         run: uv run --locked python scripts/check_docs.py
+
+  evaluations:
+    name: Evaluation suite report
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18.3@sha256:7e32e9833a6fb1c92c32552794cb6ed569d51b445a54907d35fc112ef39684db
+        env:
+          POSTGRES_USER: enterprise_workflow
+          # Throwaway CI-only service password; it protects no real data.
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: enterprise_workflow_eval
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U enterprise_workflow -d enterprise_workflow_eval"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://enterprise_workflow:ci-only-password@127.0.0.1:5432/enterprise_workflow_eval
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.23"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install locked dependencies
+        run: uv sync --locked
+
+      - name: Apply migrations
+        run: uv run --locked alembic upgrade head
+
+      # Fails the job if any case misses its expected outcome.
+      - name: Run the evaluation suite
+        run: uv run --locked python -m app.evals run --reports var/evals
+
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: evaluation-report
+          path: var/evals/
+          if-no-files-found: error
+          retention-days: 14
+
+  compose:
+    name: Compose stack, smoke check and backup cycle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      # Isolate this job's containers and volumes from every other stack.
+      COMPOSE_PROJECT_NAME: enterprise-workflow-agent-ci-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Fresh random values per run; masked in logs and never stored.
+      - name: Generate throwaway secrets
+        run: |
+          for name in POSTGRES_PASSWORD SANDBOX_WEBHOOK_SECRET; do
+            value="$(openssl rand -hex 24)"
+            echo "::add-mask::${value}"
+            echo "${name}=${value}" >> "${GITHUB_ENV}"
+          done
+
+      - name: Build images
+        run: docker compose build
+
+      - name: Start the stack
+        run: docker compose up -d --wait
+
+      - name: Smoke check over HTTP
+        run: docker compose run --rm --no-deps -T api python -m app.smoke --api http://api:8003 --wait 90
+
+      - name: Backup, wipe, restore and verify
+        run: |
+          mkdir -m 777 -p backups
+          backup() {
+            docker compose run --rm --no-deps -T -v "${PWD}/backups:/backups" api \
+              python -m app.backup "$@"
+          }
+          backup export /backups/run
+          # Preserve the receiver's SQLite action/deduplication ledger. Only the
+          # PostgreSQL volume is replaced for the empty-database restore.
+          docker compose down
+          database_volumes=()
+          while IFS= read -r database_volume; do
+            if [ -n "${database_volume}" ]; then
+              database_volumes+=("${database_volume}")
+            fi
+          done < <(
+            docker volume ls --quiet \
+              --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" \
+              --filter "label=com.docker.compose.volume=pgdata"
+          )
+          if [ "${#database_volumes[@]}" -ne 1 ]; then
+            echo "Expected exactly one PostgreSQL volume; refusing to remove any."
+            exit 1
+          fi
+          docker volume rm "${database_volumes[0]}"
+          docker compose up -d --wait
+          backup restore /backups/run
+          backup verify /backups/run
+          backup check
+
+      - name: Show service logs
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Remove the stack
+        if: always()
+        run: docker compose down -v

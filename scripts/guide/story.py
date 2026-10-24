@@ -38,6 +38,7 @@ from guide.stage06 import add_stage06
 from guide.stage07 import add_stage07
 from guide.stage08 import add_stage08
 from guide.stage09 import add_stage09
+from guide.stage10 import add_stage10
 from guide.toc import section
 
 _REMOTE = {
@@ -176,6 +177,13 @@ def _overview(story: list[Any]) -> None:
                         "Signed outbox delivery with retries, resource limits, 31 evaluations",
                     ),
                 ],
+                [
+                    "10",
+                    tr(
+                        "Образы по digest, compose на 127.0.0.1, smoke по HTTP, проверяемая копия",
+                        "Digest-pinned images, compose on 127.0.0.1, HTTP smoke, verified backup",
+                    ),
+                ],
             ],
             [50, W - 50],
         ),
@@ -219,35 +227,28 @@ def _cheat_sheet(story: list[Any]) -> None:
             tr("Демонстрация домена без базы", "Domain demo without a database"),
         ),
         (
-            "uv run --locked alembic upgrade head",
-            tr("Применить миграции к DATABASE_URL", "Apply migrations to DATABASE_URL"),
+            "uv run --locked alembic upgrade head | check",
+            tr(
+                "Миграции; сверить модели и схему", "Migrate; compare models and schema"
+            ),
         ),
         (
-            "uv run --locked alembic check",
-            tr("Сравнить модели и схему", "Compare models and schema"),
+            "... persistence_demo [show WORKFLOW_ID]",
+            tr(
+                "Демонстрация этапа 03; прочитать процесс",
+                "Stage 03 demo; read a workflow",
+            ),
         ),
         (
-            "uv run --locked python -m app.persistence_demo",
-            tr("Демонстрация этапа 03", "Stage 03 demo"),
+            "... documents_cli write-samples | ingest | evidence | demo",
+            tr(
+                "Образцы, приём, источник поля (этап 04)",
+                "Samples, intake, field source (stage 04)",
+            ),
         ),
         (
-            "... persistence_demo show WORKFLOW_ID",
-            tr("Прочитать процесс и аудит", "Read a workflow and its audit"),
-        ),
-        (
-            "... documents_cli write-samples var/samples",
-            tr("Записать образцы (без базы)", "Write samples (no database)"),
-        ),
-        ("... documents_cli ingest FILE", tr("Принять документ", "Ingest a document")),
-        (
-            "... documents_cli evidence ID FIELD",
-            tr("Открыть источник поля", "Open a field's source"),
-        ),
-        ("... documents_cli demo", tr("Демонстрация этапа 04", "Stage 04 demo")),
-        ("... reconciliation_cli demo", tr("Демонстрация этапа 05", "Stage 05 demo")),
-        (
-            "... reconciliation_cli show SNAPSHOT_ID",
-            tr("Отчёт снимка сверки", "Reconciliation snapshot report"),
+            "... reconciliation_cli demo | show SNAPSHOT_ID",
+            tr("Сверка этапа 05 и отчёт снимка", "Stage 05 reconciliation and report"),
         ),
         (
             "... users_cli create | token | revoke | list",
@@ -277,6 +278,18 @@ def _cheat_sheet(story: list[Any]) -> None:
         (
             "... outbox_demo; ... evals run | list",
             tr("Демонстрация и оценки этапа 09", "Stage 09 demo and evaluations"),
+        ),
+        (
+            "docker compose up -d --build --wait",
+            tr("Стек этапа 10 на 127.0.0.1", "Stage 10 stack on 127.0.0.1"),
+        ),
+        (
+            "... smoke --api URL [--wait 60]",
+            tr("Сценарий по HTTP до доставки", "Scenario over HTTP until delivery"),
+        ),
+        (
+            "... backup export | restore | verify DIR; check",
+            tr("Резервная копия с проверкой", "Verified backup and restore"),
         ),
         ("uv run --locked ruff check .", tr("Линтер", "Linter")),
         (
@@ -496,6 +509,22 @@ def _common_errors(story: list[Any]) -> None:
             ),
         ),
         (
+            mono("required variable POSTGRES_PASSWORD"),
+            tr(
+                "Задай POSTGRES_PASSWORD и SANDBOX_WEBHOOK_SECRET",
+                "Set POSTGRES_PASSWORD and SANDBOX_WEBHOOK_SECRET",
+            ),
+        ),
+        (
+            tr(
+                "backup_error: нужна пустая база", "backup_error: empty database needed"
+            ),
+            tr(
+                "Восстанавливай в свежую схему той же ревизии",
+                "Restore into a fresh schema at the same revision",
+            ),
+        ),
+        (
             tr("Тест свежести PDF упал", "PDF freshness test failed"),
             tr(
                 "Пересобери оба PDF и проверь страницы",
@@ -607,8 +636,16 @@ def _questions(story: list[Any]) -> None:
             "Why does passing every evaluation not mean production readiness?",
         ),
         tr(
-            "Что пока не защищено и на каком этапе это появится?",
-            "What is not protected yet, and in which stage will it be?",
+            "Зачем закреплять базовые образы по digest, а не только по тегу?",
+            "Why pin base images by digest rather than only by tag?",
+        ),
+        tr(
+            "Почему восстановление сверяет данные с манифестом до COMMIT?",
+            "Why does a restore compare the data with the manifest before COMMIT?",
+        ),
+        tr(
+            "Что проект по-прежнему не защищает и почему это вне его объёма?",
+            "What does the project still not protect, and why is it out of scope?",
         ),
     ]
     for index, question in enumerate(questions, start=1):
@@ -699,12 +736,12 @@ def _results(story: list[Any], verification: dict[str, Any]) -> None:
             tr(
                 "Не реализовано: адаптер настоящей LLM (07 и оценки работают с "
                 "подставными провайдерами), лимит памяти PDF-процесса на macOS, "
-                "доставка в настоящие системы, Docker-выпуск (10). Срок действия "
-                "токенов и SSO — вне объёма.",
+                "доставка в настоящие системы, публикация образов, TLS и "
+                "развёртывание. Полный список — docs/LIMITATIONS.md.",
                 "Not implemented: a real LLM adapter (07 and the evaluations use "
                 "substitute providers), a PDF worker memory limit on macOS, delivery "
-                "to real systems, Docker release (10). Token expiry and SSO are out "
-                "of scope.",
+                "to real systems, image publishing, TLS and deployment. The full list "
+                "is docs/LIMITATIONS.md.",
             ),
             GREEN,
             GREEN_L,
@@ -725,6 +762,7 @@ def build_story(facts: Facts, verification: dict[str, Any]) -> list[Any]:
     add_stage07(story, facts)
     add_stage08(story, facts)
     add_stage09(story, facts)
+    add_stage10(story, facts)
     _cheat_sheet(story)
     _common_errors(story)
     _questions(story)

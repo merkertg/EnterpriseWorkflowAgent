@@ -20,6 +20,11 @@ def isolated_settings(
         "APP_ENV",
         "APP_DEBUG",
         "DATABASE_URL",
+        "DATABASE_HOST",
+        "DATABASE_PORT",
+        "DATABASE_NAME",
+        "DATABASE_USER",
+        "DATABASE_PASSWORD",
         "SANDBOX_WEBHOOK_URL",
         "SANDBOX_WEBHOOK_SECRET",
     ):

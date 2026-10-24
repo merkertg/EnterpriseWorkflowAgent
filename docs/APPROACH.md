@@ -22,7 +22,7 @@ real supplier or modify a production ERP system.
 
 ## Delivery strategy
 
-Stages 01–09 are implemented. Stage 01 establishes a small FastAPI service,
+Stages 01–10 are implemented (release 0.10.0). Stage 01 establishes a small FastAPI service,
 environment settings, tests, static checks and documentation. Stage 02 adds a
 standard-library domain with immutable purchasing models, exact money, seven
 basic rule findings and in-memory workflow transitions.
@@ -51,6 +51,10 @@ bounded retries, tightens resource and request limits, and adds an
 evaluation suite ([ADR 0009](adr/0009-outbox-delivery-and-evaluations.md));
 `uv run --locked python -m app.outbox_demo` and
 `uv run --locked python -m app.evals run` exercise it.
+Stage 10 makes the release reproducible with digest-pinned images, a
+loopback-only compose stack, an HTTP smoke check, verified logical backups
+and extra CI jobs ([ADR 0010](adr/0010-containers-and-logical-backups.md));
+`docker compose up -d --build --wait` and `python -m app.smoke` exercise it.
 The default local port is `8003`. The first endpoint is `GET /health`; with
 default settings it returns:
 
@@ -107,8 +111,11 @@ app/
   fictional_desk.py       # Shared fictional setup for demos and evaluations
   outbox_worker.py        # Delivery worker, status and requeue commands
   outbox_demo.py          # Fictional Stage 09 delivery scenarios
+  smoke.py                # End-to-end HTTP check of a running deployment
+  backup.py               # Verified logical export and restore
 ui/                       # Streamlit page and its HTTP client; no app imports
 sandbox/                  # Fictional webhook receiver; no app imports
+Dockerfile, compose.yaml  # Pinned images and the local loopback-only stack
 migrations/               # Alembic environment and revisions
 tests/
 ```
@@ -245,7 +252,9 @@ a bounded agent runs with deterministic offline providers, and since Stage 08
 a Streamlit page uses the same API; since Stage 09 outbox events reach a
 local sandbox receiver only. Account management over HTTP, token expiry and
 SSO, delivery to any real system, a real model adapter and manual field
-correction remain unimplemented. The wider project does not
+correction remain unimplemented. Since Stage 10 the stack runs from pinned
+containers on loopback ports; publishing images, TLS and deployment remain
+out of scope. [LIMITATIONS.md](LIMITATIONS.md) lists every known limit. The wider project does not
 promise production readiness, real payments, autonomous approval or unrestricted
 code execution. OCR, multi-tenant operation and production ERP connectors require
 separate decisions and acceptance criteria.

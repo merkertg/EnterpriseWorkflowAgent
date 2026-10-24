@@ -2,8 +2,9 @@
 
 The build stores this hash in the PDF metadata. A test recomputes it, so a
 change to the generator, verification.json, application, interface or
-sandbox code, migrations or uv.lock without rebuilding both PDFs fails the
-test suite. Standard library only: the test runs without ReportLab.
+sandbox code, migrations, uv.lock, the Dockerfile, .dockerignore, compose.yaml or the CI
+workflow without rebuilding both PDFs fails the test suite. Standard library
+only: the test runs without ReportLab.
 """
 
 import hashlib
@@ -20,6 +21,10 @@ def source_files(root: Path = PROJECT_ROOT) -> list[Path]:
         "scripts/guide/*.py",
         "docs/guide/verification.json",
         "uv.lock",
+        "Dockerfile",
+        ".dockerignore",
+        "compose.yaml",
+        ".github/workflows/ci.yml",
         "app/**/*.py",
         "ui/**/*.py",
         "sandbox/**/*.py",

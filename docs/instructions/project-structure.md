@@ -4,7 +4,7 @@
 
 Keep the initial application small and add a layer when it owns real behavior.
 
-## Implemented in Stages 01–09
+## Implemented in Stages 01–10
 
 | Location | Responsibility |
 | --- | --- |
@@ -68,6 +68,10 @@ Keep the initial application small and add a layer when it owns real behavior.
 | `app/outbox_demo.py` | Fictional Stage 09 delivery scenarios with a shifted clock |
 | `app/evals/` | Evaluation cases, context, runner, reports and `python -m app.evals` |
 | `sandbox/receiver.py` | Fictional signed-webhook receiver on SQLite; imports nothing from `app` |
+| `app/smoke.py` | End-to-end HTTP check of a running deployment, including delivery |
+| `app/backup.py` | Verified logical export, restore into an empty database, `verify` and `check` |
+| `Dockerfile`, `.dockerignore` | Digest-pinned multi-stage build of the `app` and `ui` images |
+| `compose.yaml` | Local stack: PostgreSQL, migrate, API, receiver with the worker, page; loopback ports |
 | `ui/app.py` | Streamlit page: sign-in, workflows, new invoice, actions, assistant, history |
 | `ui/client.py` | Standard-library HTTP client with a replaceable transport and `ApiError` |
 | `ui/keys.py` | Idempotency keys derived from the user's intent |
@@ -114,6 +118,10 @@ and services; without `DATABASE_URL` business endpoints answer 503.
 | `docs/STAGE_09.md` | Outbox delivery, hardening and evaluations walkthrough in Russian |
 | `docs/instructions/outbox.md` | Delivery worker, receiver, signature, states and commands |
 | `docs/instructions/evaluations.md` | Evaluation categories, commands, reports and limits |
+| `docs/STAGE_10.md` | Images, compose, smoke check, backups and CI walkthrough in Russian |
+| `docs/instructions/release.md` | Running the compose stack, services, images and CI jobs |
+| `docs/instructions/backup.md` | Backup format, restore rules, checks and safety |
+| `docs/LIMITATIONS.md` | Every known limitation and the three kinds of evidence, in Russian |
 | `docs/instructions/` | Short operational instructions in English |
 | `docs/CI_CD.md` | CI configuration and limits of remote verification |
 | `docs/VERIFICATION.md` | Recorded command outcomes and limitations |
@@ -127,8 +135,7 @@ directories to create now:
 
 | Location | Add when needed for |
 | --- | --- |
-| `app/infrastructure/llm/` (other adapters) | A real model provider adapter |
-| `Dockerfile`, `compose.yaml` | Stage 10 reproducible local release |
+| `app/infrastructure/llm/` (other adapters) | A real model provider adapter, outside the ten roadmap stages |
 
 The persistence flow is `WorkflowService → UnitOfWork → SqlAlchemyWorkflowRepository
 → PostgreSQL`; domain functions compute every transition before anything is

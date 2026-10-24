@@ -3,7 +3,8 @@
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
+from sqlalchemy import make_url
 
 from app.config import Settings, get_settings, require_loopback_url
 
@@ -80,6 +81,59 @@ def test_database_url_is_read_but_hidden_from_representations(
     assert settings.database_url.get_secret_value() == url
     assert "fictional-password" not in repr(settings)
     assert "fictional-password" not in str(settings.model_dump())
+
+
+@pytest.mark.parametrize(
+    "password", ["demo@password", "demo%40password", "demo:/?#[]!$ 'password"]
+)
+def test_database_components_preserve_reserved_password_characters(
+    password: str,
+) -> None:
+    """A raw Compose password survives URL rendering and parsing without changes."""
+    settings = Settings(
+        database_host="postgres",
+        database_user="demo",
+        database_name="demo_db",
+        database_password=SecretStr(password),
+    )
+    assert settings.database_url is not None
+    parsed = make_url(settings.database_url.get_secret_value())
+    assert parsed.host == "postgres"
+    assert parsed.port == 5432
+    assert parsed.database == "demo_db"
+    assert parsed.password == password
+    assert password not in repr(settings)
+    assert password not in str(settings.model_dump())
+
+
+def test_explicit_database_url_takes_precedence_over_components() -> None:
+    """Native setups can keep their URL while Compose uses raw components."""
+    explicit = "postgresql+psycopg://demo:example@127.0.0.1/native_db"
+    settings = Settings(database_url=SecretStr(explicit), database_host="unused")
+    assert settings.database_url is not None
+    assert settings.database_url.get_secret_value() == explicit
+
+
+@pytest.mark.parametrize(
+    "components",
+    [
+        {"database_host": "postgres"},
+        {
+            "database_host": "postgres",
+            "database_user": "demo",
+            "database_name": "demo_db",
+            "database_password": "",
+        },
+    ],
+)
+def test_incomplete_database_components_are_rejected(
+    monkeypatch: pytest.MonkeyPatch, components: dict[str, str]
+) -> None:
+    """A partially configured connection fails with a bounded, secret-free error."""
+    for name, value in components.items():
+        monkeypatch.setenv(name.upper(), value)
+    with pytest.raises(ValidationError):
+        Settings()
 
 
 def test_sandbox_webhook_defaults_to_loopback_without_a_secret() -> None:

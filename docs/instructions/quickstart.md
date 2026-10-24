@@ -55,12 +55,18 @@ use it consistently in the URLs.
 | `APP_ENV` | `development` | One of `development`, `test`, `production` |
 | `APP_DEBUG` | `false` | Local debugging; it does not grant access permissions |
 | `DATABASE_URL` | unset | `postgresql+psycopg://...` URL for migrations, command-line tools and the business API; hidden in settings output |
+| `DATABASE_HOST`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD` | unset | Alternative raw connection components; all four are required together |
+| `DATABASE_PORT` | `5432` | Component connection port, 1–65535 |
 | `SANDBOX_WEBHOOK_URL` | `http://127.0.0.1:8010/webhook` | The only outbox destination; must be http(s) on `127.0.0.1` or `[::1]` |
 | `SANDBOX_WEBHOOK_SECRET` | unset | Signing secret for the outbox worker (32+ characters); hidden in settings output |
 
 Environment variables override `.env`, which overrides defaults. Explicit
 `Settings(...)` constructor arguments have higher priority. Unknown `.env`
 keys are ignored. Settings are cached; restart the server after changes.
+
+An explicit `DATABASE_URL` takes priority over the components. Compose supplies
+raw components so reserved characters in a password remain literal; there is
+no manual URL escaping in that path. `DATABASE_PASSWORD` is also a `SecretStr`.
 
 Continue with [API usage](usage.md) or [testing](testing.md).
 
@@ -99,3 +105,9 @@ For Stage 09, run `uv run --locked python -m app.outbox_demo` and
 `python -m sandbox.receiver` and `python -m app.outbox_worker run` with the
 same `SANDBOX_WEBHOOK_SECRET`; see [outbox delivery](outbox.md) and
 [evaluations](evaluations.md).
+
+For Stage 10, set `POSTGRES_PASSWORD` and `SANDBOX_WEBHOOK_SECRET`, then run
+`docker compose up -d --build --wait` and
+`docker compose run --rm --no-deps api python -m app.smoke --api http://api:8003`;
+see [release](release.md). `python -m app.backup export | restore | verify |
+check` handles backups; see [backup](backup.md).

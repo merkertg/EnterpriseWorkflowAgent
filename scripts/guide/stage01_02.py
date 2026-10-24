@@ -268,11 +268,13 @@ def add_stage01(story: list[Any], facts: Facts) -> None:
                 "Workflow .github/workflows/ci.yml ставит группу ui, запускает сервис "
                 "postgres:18.3 (закреплён по digest), применяет миграции, проверяет "
                 "alembic check и выполняет все тесты с REQUIRE_TEST_DATABASE=1: "
-                "потерянный адрес базы превращается в ошибку, а не в пропуск.",
+                "потерянный адрес базы превращается в ошибку, а не в пропуск. С этапа "
+                "10 ещё два задания: оценки и стек compose (раздел 36).",
                 "The .github/workflows/ci.yml workflow installs the ui group, starts a "
                 "postgres:18.3 service (pinned by digest), applies migrations, runs "
                 "alembic check and every test with REQUIRE_TEST_DATABASE=1, so a lost "
-                "database URL fails instead of skipping.",
+                "database URL fails instead of skipping. Since Stage 10 two more jobs "
+                "run the evaluations and the compose stack (section 36).",
             )
         ),
         Spacer(1, 6),

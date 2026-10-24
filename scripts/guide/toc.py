@@ -42,6 +42,9 @@ CONTENTS = [
     ("Доставка outbox", "Outbox delivery"),
     ("Сбои и повторная доставка", "Failures and redelivery"),
     ("Ограничения и оценки", "Limits and evaluations"),
+    ("Образы и compose", "Images and compose"),
+    ("Резервная копия и восстановление", "Backup and restore"),
+    ("Выпуск и ограничения", "Release and limitations"),
     ("Шпаргалка команд", "Command cheat sheet"),
     ("Типичные ошибки", "Common errors"),
     ("Проверь себя", "Check yourself"),
@@ -59,6 +62,7 @@ STAGE_SECTIONS = {
     "07": range(25, 28),
     "08": range(28, 31),
     "09": range(31, 34),
+    "10": range(34, 37),
 }
 
 

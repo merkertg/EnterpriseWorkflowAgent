@@ -35,7 +35,7 @@ from guide.layout import (
     rbox,
 )
 
-STAGES_DONE = 9
+STAGES_DONE = 10
 
 
 def roadmap() -> Diagram:
@@ -1241,3 +1241,148 @@ def redelivery() -> Diagram:
         )
 
     return Diagram(96, draw)
+
+
+def compose_stack() -> Diagram:
+    """Six services; only two ports reach the host, and only on 127.0.0.1."""
+
+    def draw(c: Canvas, w: float, h: float) -> None:
+        """Draw the request path on top and the delivery pair underneath."""
+        gap, bh = 18, 48
+        bw = (w - 3 * gap) / 4
+        top = h - bh - 30
+        xs = [index * (bw + gap) for index in range(4)]
+        services = [
+            ("ui", "Streamlit :8501", VIOLET_L, VIOLET),
+            ("api", "Uvicorn :8003", BLUE_L, BLUE),
+            ("postgres", tr("том pgdata", "volume pgdata"), TEAL_L, TEAL),
+            ("migrate", tr("alembic, один раз", "alembic, once"), SLATE_L, MUTED),
+        ]
+        for x, (title, sub, fill, edge) in zip(xs, services, strict=True):
+            node(c, x, top, bw, bh, title, sub, fill, edge, 9.6, 7.6)
+        arrow(c, xs[0] + bw + 1, top + bh / 2, xs[1] - 1, top + bh / 2)
+        arrow(c, xs[1] + bw + 1, top + bh / 2, xs[2] - 1, top + bh / 2)
+        arrow(c, xs[3] - 1, top + bh / 2, xs[2] + bw + 1, top + bh / 2)
+        c.setFillColor(RED)
+        for x, port in ((xs[0], "8501"), (xs[1], "8003")):
+            draw_text(
+                c, x + bw / 2, top + bh + 8, f"↑ 127.0.0.1:{port}", "PT", 8, "center"
+            )
+        low, frame_h = 26, 64
+        frame_x = xs[1]
+        frame_w = xs[3] + bw - frame_x
+        rbox(c, frame_x, low, frame_w, frame_h, WHITE, ORANGE, r=8, lw=1.1, dash=(4, 3))
+        inner_h = 36
+        worker_x = frame_x + 10
+        receiver_x = frame_x + frame_w - 10 - bw
+        node(
+            c,
+            worker_x,
+            low + 8,
+            bw,
+            inner_h,
+            "worker",
+            "outbox",
+            AMBER_L,
+            AMBER,
+            9.4,
+            7.4,
+        )
+        node(
+            c,
+            receiver_x,
+            low + 8,
+            bw,
+            inner_h,
+            "receiver",
+            "127.0.0.1:8010",
+            GREEN_L,
+            GREEN,
+            9.4,
+            7.4,
+        )
+        arrow(
+            c,
+            worker_x + bw + 1,
+            low + 8 + inner_h / 2,
+            receiver_x - 1,
+            low + 8 + inner_h / 2,
+        )
+        arrow(c, worker_x + bw / 2, low + 8 + inner_h + 1, xs[2] + bw / 2, top - 1)
+        c.setFillColor(MUTED)
+        c.setFont("PT-Italic", 8.4)
+        c.drawString(
+            0,
+            6,
+            tr(
+                "Пунктир — одно сетевое пространство (network_mode: service:receiver); "
+                "секреты только из окружения.",
+                "Dashed: one network namespace (network_mode: service:receiver); "
+                "secrets only from the environment.",
+            ),
+        )
+
+    return Diagram(196, draw)
+
+
+def backup_cycle() -> Diagram:
+    """Export, empty schema, restore and compare before anything is committed."""
+
+    def draw(c: Canvas, w: float, h: float) -> None:
+        """Draw five steps of one verified restore."""
+        gap, bh = 12, 64
+        bw = (w - 4 * gap) / 5
+        y = h - bh - 6
+        steps = [
+            (tr("База", "Database"), tr("ревизия 0006", "revision 0006"), TEAL_L, TEAL),
+            (
+                "export",
+                tr(
+                    "REPEATABLE READ,\nJSON Lines + SHA-256",
+                    "REPEATABLE READ,\nJSON Lines + SHA-256",
+                ),
+                BLUE_L,
+                BLUE,
+            ),
+            (
+                tr("Пустая база", "Empty database"),
+                tr("та же ревизия", "same revision"),
+                SLATE_L,
+                MUTED,
+            ),
+            (
+                "restore",
+                tr(
+                    "одна транзакция,\nцикл ключей — потом",
+                    "one transaction,\nkey cycle filled later",
+                ),
+                AMBER_L,
+                AMBER,
+            ),
+            (
+                tr("Сверка", "Compare"),
+                tr(
+                    "выгрузка в памяти\n= манифест → COMMIT",
+                    "in-memory export\n= manifest → COMMIT",
+                ),
+                GREEN_L,
+                GREEN,
+            ),
+        ]
+        for index, (title, sub, fill, edge) in enumerate(steps):
+            x = index * (bw + gap)
+            node(c, x, y, bw, bh, title, sub, fill, edge, 9.4, 7.3)
+            if index:
+                arrow(c, x - gap + 1, y + bh / 2, x - 1, y + bh / 2)
+        c.setFillColor(MUTED)
+        c.setFont("PT-Italic", 8.4)
+        c.drawString(
+            0,
+            6,
+            tr(
+                "Любое расхождение — ROLLBACK; check перепроверяет хеши и сверки.",
+                "Any difference rolls back; check re-verifies hashes and reconciliations.",
+            ),
+        )
+
+    return Diagram(98, draw)

@@ -47,6 +47,8 @@ from reportlab.lib.units import mm  # noqa: E402
 from reportlab.lib.utils import simpleSplit  # noqa: E402
 from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate  # noqa: E402
 
+from app import __version__  # noqa: E402
+
 GUIDE_DIR = PROJECT_ROOT / "docs/guide"
 OUTPUTS = {
     "ru": GUIDE_DIR / "enterprise-workflow-agent-guide.pdf",
@@ -62,6 +64,7 @@ STAGE_COLOURS = {
     "07": "#FCD34D",
     "08": "#A5B4FC",
     "09": "#6EE7B7",
+    "10": "#FCA5A5",
 }
 
 
@@ -108,11 +111,13 @@ def cover_page(c: Canvas, doc: Any) -> None:
             "Наглядное руководство: uv и FastAPI, точные деньги и правила, "
             "состояния процесса, PostgreSQL и миграции, транзакции, аудит и повторы, "
             "документы с цитатами, сверка с заказом, решение сотрудника с ролями, "
-            "ограниченный агент, интерфейс, подписанная доставка и оценки.",
+            "ограниченный агент, интерфейс, подписанная доставка, оценки и "
+            "воспроизводимый выпуск.",
             "A visual guide: uv and FastAPI, exact money and rules, workflow states, "
             "PostgreSQL and migrations, transactions, audit and retries, documents "
             "with citations, order reconciliation, role-checked decisions, a bounded "
-            "agent, an interface, signed delivery and evaluations.",
+            "agent, an interface, signed delivery, evaluations and a "
+            "reproducible release.",
         ),
         "PT",
         13.5,
@@ -219,7 +224,9 @@ def cover_page(c: Canvas, doc: Any) -> None:
     c.drawString(
         MARGIN,
         66,
-        tr("Проверка", "Verified")
+        tr("Версия", "Version")
+        + f" {__version__} · "
+        + tr("проверка", "verified")
         + f" {verification['verified_on']} · "
         + tr("база", "base")
         + f" {verification['git']['base_commit']} · uv {environment['uv']} · "

@@ -259,11 +259,11 @@ def create_receiver(
 
 
 @contextmanager
-def serving(app: FastAPI) -> Iterator[str]:
-    """Serve on a free 127.0.0.1 port in a thread; yield the webhook URL.
+def serving_app(app: FastAPI) -> Iterator[str]:
+    """Serve any app on a free 127.0.0.1 port in a thread; yield its base URL.
 
-    Demos and evaluations use this to talk to a real HTTP server without a
-    second terminal. The socket is bound before the thread starts, so the
+    Demos, evaluations and tests use this to talk to a real HTTP server
+    without a second terminal. The socket is bound before the thread starts, so the
     port is known and nobody else can take it.
     """
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -284,11 +284,18 @@ def serving(app: FastAPI) -> Iterator[str]:
             raise RuntimeError("The sandbox receiver did not start.")
         time.sleep(0.01)
     try:
-        yield f"http://127.0.0.1:{port}/webhook"
+        yield f"http://127.0.0.1:{port}"
     finally:
         server.should_exit = True
         thread.join(timeout=10)
         listener.close()
+
+
+@contextmanager
+def serving(app: FastAPI) -> Iterator[str]:
+    """Serve the receiver in a thread; yield its webhook URL."""
+    with serving_app(app) as base:
+        yield f"{base}/webhook"
 
 
 def main(argv: Sequence[str] | None = None) -> int:

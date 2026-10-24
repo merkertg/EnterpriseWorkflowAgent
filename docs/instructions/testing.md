@@ -150,6 +150,20 @@ processes, the full evaluation suite and an exhausted delivery shown on the
 page. The memory-limit test runs only on Linux and is reported as skipped
 elsewhere.
 
+Stage 10 tests without a database check the release files: digest-pinned
+base images, a non-root user and `--locked` installs in the `Dockerfile`;
+loopback-only ports, required secrets, the worker in the receiver's network
+namespace and the CI database digest in `compose.yaml`; the `.dockerignore`
+exclusions; one version in `pyproject.toml`, the package and the image tags;
+the restorable key cycle; and that `app.backup` and `app.smoke` stop without
+`DATABASE_URL`. With PostgreSQL they cover a full backup round trip (export,
+empty schema, restore, verify, integrity, new work after restore), refusals
+for a non-empty target, a changed file, another revision and a reused
+directory, an integrity check that finds edited document bytes, and the
+smoke check against a real HTTP server, receiver and worker thread. The
+Docker stack itself is checked by hand and by the CI `compose` job; see
+[release](release.md).
+
 `tests/test_guide_pdfs.py` checks both PDF guides with pypdf: the source
 fingerprint stored in each PDF must match a fresh hash of the generator,
 `docs/guide/verification.json`, `app/`, `ui/`, `sandbox/`, migrations and `uv.lock`; every section

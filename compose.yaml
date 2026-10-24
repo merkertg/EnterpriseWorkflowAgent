@@ -1,0 +1,109 @@
+# Local learning stack (Stage 10): PostgreSQL, migrations, API, the sandbox
+# receiver with the outbox worker in its network namespace, and the page.
+#
+# Published ports listen on 127.0.0.1 only. Secrets are not stored here:
+# POSTGRES_PASSWORD and SANDBOX_WEBHOOK_SECRET must be set in the shell (or a
+# local, uncommitted .env). This is for local learning, not a deployment.
+name: enterprise-workflow-agent
+
+x-app: &app
+  build:
+    context: .
+    target: app
+  image: enterprise-workflow-agent:0.10.0
+  environment: &app-env
+    DATABASE_HOST: postgres
+    DATABASE_PORT: "5432"
+    DATABASE_NAME: enterprise_workflow
+    DATABASE_USER: enterprise_workflow
+    DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+
+services:
+  postgres:
+    # Same image and digest as the CI service.
+    image: postgres:18.3@sha256:7e32e9833a6fb1c92c32552794cb6ed569d51b445a54907d35fc112ef39684db
+    environment:
+      POSTGRES_USER: enterprise_workflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: enterprise_workflow
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U enterprise_workflow -d enterprise_workflow"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  migrate:
+    <<: *app
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *app
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8003"]
+    ports:
+      - "127.0.0.1:8003:8003"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/health', timeout=3)"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  receiver:
+    <<: *app
+    # Listens on 127.0.0.1 inside its own network namespace only.
+    command: ["python", "-m", "sandbox.receiver", "--database", "/data/receiver.sqlite3"]
+    environment:
+      SANDBOX_WEBHOOK_SECRET: ${SANDBOX_WEBHOOK_SECRET:?set SANDBOX_WEBHOOK_SECRET}
+    volumes:
+      - receiver:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health', timeout=3)"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  worker:
+    <<: *app
+    command: ["python", "-m", "app.outbox_worker", "run"]
+    # Sharing the receiver's network namespace keeps the destination a
+    # loopback address, as SANDBOX_WEBHOOK_URL requires.
+    network_mode: "service:receiver"
+    environment:
+      <<: *app-env
+      SANDBOX_WEBHOOK_SECRET: ${SANDBOX_WEBHOOK_SECRET:?set SANDBOX_WEBHOOK_SECRET}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      receiver:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: .
+      target: ui
+    image: enterprise-workflow-agent-ui:0.10.0
+    environment:
+      EWA_API_URL: http://api:8003
+    ports:
+      - "127.0.0.1:8501:8501"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=3)"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  pgdata:
+  receiver:

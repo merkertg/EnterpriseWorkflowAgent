@@ -1,6 +1,6 @@
 {
   "project": "enterprise-workflow-agent",
-  "stage": "09",
+  "stage": "10",
   "implemented_stages": [
     "01",
     "02",
@@ -10,14 +10,14 @@
     "06",
     "07",
     "08",
-    "09"
+    "09",
+    "10"
   ],
   "status": "implemented_locally_verified",
   "verified_on": "2026-10-24",
   "timezone": "Asia/Tashkent",
   "git": {
-    "base_commit": "d02b46b",
-    "base_commit_pushed_to": "main",
+    "base_commit": "92604c6",
     "scope": "uncommitted_working_tree",
     "committed": false,
     "pushed": false
@@ -39,138 +39,112 @@
     "ruff": "0.16.10",
     "mypy": "2.4.0",
     "httpx2": "2.13.1",
-    "postgresql": "18.3 (Homebrew, temporary cluster on 127.0.0.1:55433)",
+    "postgresql": "18.3 (isolated Docker container, 127.0.0.1:55434)",
     "streamlit": "1.65.0",
-    "local_venv_note": "iCloud Desktop sync renames files inside .venv (' 2' copies); the project environment was reinstalled from uv.lock before the final runs, and the run without the ui group used a fresh environment outside iCloud"
+    "local_venv_note": "Fresh UV_PROJECT_ENVIRONMENT=/private/tmp/ewa-stage10-env outside iCloud; dev, ui and guide groups installed from uv.lock",
+    "docker": "29.8.2",
+    "compose": "5.6.0"
   },
   "tests": {
-    "total": 566,
-    "postgres": 117,
+    "total": 667,
+    "postgres": 125,
     "platform_skipped": 1,
     "platform_skipped_reason": "RLIMIT_AS memory-limit test runs on Linux only",
-    "dependency_groups": "dev + ui",
+    "dependency_groups": "dev + ui (guide also installed for PDF authoring)",
     "with_database": {
-      "passed": 565,
+      "passed": 666,
       "failed": 0,
       "skipped": 1
     },
     "without_database": {
-      "passed": 448,
-      "skipped": 118
+      "passed": 541,
+      "failed": 0,
+      "skipped": 126
     }
   },
   "checks": [
     {
-      "command": "uv lock --check --offline; uv sync --locked --group ui",
+      "command": "uv sync --locked --group ui --group guide (fresh environment outside iCloud)",
       "status": "passed",
-      "packages": 69
+      "lock_packages": 69
     },
     {
-      "command": "uv run --locked ruff check . && ruff format --check .",
+      "command": "ruff check .; ruff format --check .",
       "status": "passed",
-      "files": 206
+      "files": 218
     },
     {
-      "command": "uv run --locked --group ui mypy app tests scripts migrations ui sandbox",
+      "command": "mypy app tests scripts migrations ui sandbox",
       "status": "passed",
-      "source_files": 167
+      "source_files": 174
     },
     {
-      "command": "uv run --locked mypy app tests scripts migrations sandbox (no ui group)",
+      "command": "REQUIRE_TEST_DATABASE=1 TEST_DATABASE_URL=... python -m pytest",
       "status": "passed",
-      "source_files": 162
-    },
-    {
-      "command": "uv run --locked --group ui pytest",
-      "database": "none",
-      "status": "passed",
-      "passed": 448,
-      "failed": 0,
-      "skipped": 118
-    },
-    {
-      "command": "REQUIRE_TEST_DATABASE=1 TEST_DATABASE_URL=... uv run --locked --group ui pytest",
-      "database": "enterprise_workflow_test",
-      "status": "passed",
-      "passed": 565,
+      "passed": 666,
       "failed": 0,
       "skipped": 1
     },
     {
-      "command": "TEST_DATABASE_URL=... uv run --locked pytest (no ui group)",
+      "command": "python -m pytest (without TEST_DATABASE_URL)",
       "status": "passed",
-      "passed": 552,
-      "skipped_modules": 2,
-      "platform_skipped": 1,
-      "environment": "fresh UV_PROJECT_ENVIRONMENT outside iCloud",
-      "without_database": {
-        "passed": 440,
-        "skipped": 115
-      }
+      "passed": 541,
+      "failed": 0,
+      "skipped": 126
     },
     {
-      "command": "uv run --locked --group ui pytest -m postgres",
-      "database": "enterprise_workflow_test",
-      "status": "passed",
-      "passed": 117,
-      "deselected": 449
-    },
-    {
-      "command": "alembic upgrade head; downgrade 0005 and 0004; check; --sql",
+      "command": "alembic upgrade head; alembic check",
       "status": "passed",
       "revision": "0006",
-      "create_table_statements": 24
+      "schema_differences": 0
     },
     {
-      "command": "python -m app.outbox_demo",
-      "status": "passed",
-      "scenarios": 7
-    },
-    {
-      "command": "python -m app.evals run",
+      "command": "python -m app.evals run (isolated evaluation database)",
       "status": "passed",
       "cases": 31,
-      "passed_cases": 31
+      "passed": 31
     },
     {
-      "command": "demos 03-08 and app.ui_demo_setup",
-      "status": "passed"
+      "command": "docker compose build; docker compose up -d --wait",
+      "status": "passed",
+      "services": 6,
+      "password_reserved_characters_verified": true,
+      "ui_healthcheck": true
     },
     {
-      "command": "browser check: exhausted delivery shown, requeue, delivered",
-      "status": "passed"
+      "command": "docker compose run --rm --no-deps -T api python -m app.smoke --api http://api:8003 --wait 60",
+      "status": "passed",
+      "steps": 8
+    },
+    {
+      "command": "app.backup export; replace only project pgdata volume; restore; verify; check",
+      "status": "passed",
+      "tables": 23,
+      "rows": 45,
+      "receiver_ledger_preserved": true
     },
     {
       "command": "uv run --locked --group guide python scripts/build_guide.py",
       "status": "passed",
-      "pages": {
-        "ru": 38,
-        "en": 38
-      }
+      "languages": [
+        "ru",
+        "en"
+      ]
     },
     {
-      "command": "uv run --locked pytest tests/test_guide_pdfs.py",
+      "command": "python scripts/check_docs.py; git diff --check",
       "status": "passed",
-      "passed": 4
-    },
-    {
-      "command": "uv run --locked python scripts/check_docs.py",
-      "status": "passed",
-      "links": 303,
-      "files": 39,
-      "scope": "local_inline_markdown_target_files_only"
-    },
-    {
-      "command": "git diff --check plus trailing-whitespace and secret scan",
-      "status": "passed"
+      "local_links": 351,
+      "markdown_files": 44
     }
   ],
   "http_smoke": {
     "status": "passed",
-    "checked_stage": "09",
-    "repeated_since": false,
-    "server": "uvicorn 127.0.0.1:8003, streamlit 127.0.0.1:8501, sandbox.receiver 127.0.0.1:8010, built-in browser",
-    "result": "clerk uploads, starts and reconciles (matched); approver approves (v3); worker against a receiver in fail mode: 5 attempts http_503, exhausted; approver page shows exhausted, 5 attempts, http_503 and the requeue command; receiver restarted in accept mode, requeue, attempt 6 delivered; receiver holds one action with one receipt; page shows delivered"
+    "checked_stage": "10",
+    "transport": "isolated Docker Compose stack over HTTP",
+    "steps": 8,
+    "outcome": "approved and delivered",
+    "ui_health": "passed /_stcore/health"
   },
   "remote_ci": {
     "status": "not_verified",
@@ -280,18 +254,18 @@
       "docs/guide/enterprise-workflow-agent-guide-en.pdf"
     ],
     "pages": {
-      "ru": 38,
-      "en": 38
+      "ru": 41,
+      "en": 41
     },
-    "sections": 37,
+    "sections": 40,
     "generator": "scripts/build_guide.py",
     "reportlab": "4.4.9 (uv dependency group guide)",
     "fonts": "PT Sans / PT Mono (macOS)",
     "freshness_check": "source-sha256 in PDF keywords, tests/test_guide_pdfs.py",
-    "visual_check": "all 76 pages (38 RU + 38 EN) at 70 dpi; new diagrams at 130 dpi",
+    "visual_check": "All pages of both languages rendered at 90 dpi; release and backup sections additionally inspected at full size",
     "linux_build": "not_verified"
   },
-  "next_stage": "10",
+  "next_stage": null,
   "repeated_runs": {
     "files": [
       "tests/application/test_delivery.py",
@@ -302,7 +276,8 @@
       "tests/persistence/test_outbox_cli.py"
     ],
     "runs": 8,
-    "failures": 0
+    "failures": 0,
+    "evidence_stage": "09 (historical; not repeated as a separate repeated-run audit in stage 10)"
   },
   "reconciliation": {
     "status": "implemented_locally_verified",
@@ -433,5 +408,39 @@
   "stage_09_new_tests": {
     "without_database": 60,
     "with_database": 13
+  },
+  "release": {
+    "version": "0.10.0",
+    "docker_targets": [
+      "app",
+      "ui"
+    ],
+    "compose_services": [
+      "postgres",
+      "migrate",
+      "api",
+      "receiver",
+      "worker",
+      "ui"
+    ],
+    "local_platform": "Docker Desktop on macOS ARM64",
+    "base_images": "digest-pinned Python 3.12.15, uv 0.12.23, PostgreSQL 18.3",
+    "published": false,
+    "remote_ci": "not_verified",
+    "raw_database_components": "URL.create preserves reserved password characters; explicit DATABASE_URL takes priority",
+    "backup": {
+      "format": "ewa-backup/1",
+      "scope": "PostgreSQL application tables only; receiver SQLite excluded; no cross-store atomicity",
+      "tables": 23,
+      "roundtrip_rows": 45,
+      "receiver_ledger_preserved_in_cycle": true,
+      "manifest_and_rows_validated": true,
+      "restore_writers_blocked": true,
+      "transactional_identity_restart": true
+    }
+  },
+  "stage_10_new_tests": {
+    "without_database": 93,
+    "with_database": 8
   }
 }

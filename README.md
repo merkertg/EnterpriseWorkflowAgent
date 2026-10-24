@@ -6,10 +6,13 @@ document, extract fields with source evidence, apply corporate rules, show
 discrepancies, obtain an employee's decision and record the next process step.
 All examples will use fictional data.
 
-**Current scope: Stages 01–09 — API foundation, domain, PostgreSQL storage,
-document intake, deterministic reconciliation, employee decisions, a bounded
-review agent, a Streamlit interface over the HTTP API, and signed outbox
-delivery with hardening and an evaluation suite.**
+**Release 0.10.0: Stages 01–10 of the roadmap are implemented — API
+foundation, domain, PostgreSQL storage, document intake, deterministic
+reconciliation, employee decisions, a bounded review agent, a Streamlit
+interface over the HTTP API, signed outbox delivery with hardening and an
+evaluation suite, and a reproducible container release with verified
+backups.** It is a learning project on fictional data, not a production
+system; see the [limitations](docs/LIMITATIONS.md).
 The repository contains a FastAPI liveness endpoint, validated settings, exact
 money and purchasing models, seven basic validation reasons and an immutable
 workflow. Stage 03 persists it in PostgreSQL through Alembic migrations, with
@@ -34,11 +37,13 @@ delivers decision events at least once to a fixed loopback sandbox receiver
 with HMAC signatures, bounded retries and delivery state visible to
 employees; it limits the PDF worker's CPU, memory (where the OS allows) and
 text, command request bodies and assistant runs, and adds 31 evaluation
-cases with explicit expected outcomes. Isolated tests, PostgreSQL integration
-tests, Ruff, strict mypy, a locked environment and a GitHub Actions workflow
-cover this work. Actual results and unverified items are recorded in
-[verification](docs/VERIFICATION.md). A real model adapter and a
-reproducible release are planned.
+cases with explicit expected outcomes. Stage 10 builds digest-pinned images
+from `uv.lock`, runs the stack with Docker Compose on loopback ports, checks
+it end to end over HTTP, and exports, restores and verifies the data.
+Isolated tests, PostgreSQL integration tests, Ruff, strict mypy, a locked
+environment and three GitHub Actions jobs cover this work. Actual results and
+unverified items are recorded in [verification](docs/VERIFICATION.md); a real
+model adapter remains unimplemented.
 
 The planned design is a modular monolith. Deterministic code calculates amounts,
 checks rules and controls state transitions. The AI assistant proposes fields and
@@ -46,8 +51,8 @@ explanations; authorized employees make approval decisions. The tutorial does no
 initiate payments or act on real corporate systems.
 
 **Visual guides:** [Russian PDF](docs/guide/enterprise-workflow-agent-guide.pdf)
-and [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf), 38 pages
-each, with diagrams for stages 01–09.
+and [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf),
+with diagrams and explanations for stages 01–10.
 
 **По-русски:** основа API — [этап 01](docs/STAGE_01.md), предметная модель,
 правила и состояния — [этап 02](docs/STAGE_02.md), хранение, транзакции и
@@ -56,14 +61,18 @@ each, with diagrams for stages 01–09.
 решение сотрудника, роли и outbox — [этап 06](docs/STAGE_06.md),
 ограниченный AI-агент — [этап 07](docs/STAGE_07.md), интерфейс Streamlit —
 [этап 08](docs/STAGE_08.md), доставка outbox, ограничения и оценки —
-[этап 09](docs/STAGE_09.md).
+[этап 09](docs/STAGE_09.md), воспроизводимый выпуск —
+[этап 10](docs/STAGE_10.md). Сводные ограничения —
+[LIMITATIONS.md](docs/LIMITATIONS.md).
 Все этапы и критерии готовности — в [дорожной карте](docs/ROADMAP.md).
 
 ## Quickstart
 
-Requirements: [uv](https://docs.astral.sh/uv/getting-started/installation/) and
-Python 3.12. Run commands from this repository root. `uv` can install the matching
-Python if it is missing.
+To run everything in containers instead, see
+[Docker Compose](#docker-compose). Natively, the requirements are
+[uv](https://docs.astral.sh/uv/getting-started/installation/) and Python 3.12.
+Run commands from this repository root. `uv` can install the matching Python
+if it is missing.
 
 ```bash
 uv sync --locked
@@ -118,9 +127,10 @@ stored decisions since Stage 06 come from an authenticated, authorized
 employee.
 
 Basic checks validate references, supplier, currency, self-total and an order
-total ceiling. Detailed SKU/quantity/price matching, taxes, tolerances and duplicate
-invoice detection belong to Stage 05. Passing these basic checks alone is not
-proof of a fully reconciled invoice. See [domain usage](docs/instructions/domain.md).
+total ceiling. Stage 05 implements detailed SKU/quantity/price matching,
+tolerances and duplicate invoice detection. Taxes are unsupported. Passing
+the basic checks alone is not proof of a fully reconciled invoice. See
+[domain usage](docs/instructions/domain.md).
 
 ## PostgreSQL persistence
 
@@ -292,6 +302,52 @@ command bodies over 64 KiB or without a length (`413`, `411`), and allows 20
 assistant runs per workflow per hour (`429 agent_run_limit`). See
 [evaluations](docs/instructions/evaluations.md).
 
+## Docker Compose
+
+The commands below use OpenSSL to generate secrets. Alternatively, set two
+independent random secrets of at least 32 characters manually; the container
+stack needs no host Python or uv.
+
+```bash
+export POSTGRES_PASSWORD="$(openssl rand -hex 24)"
+export SANDBOX_WEBHOOK_SECRET="$(openssl rand -hex 24)"
+docker compose up -d --build --wait
+docker compose run --rm --no-deps api python -m app.smoke --api http://api:8003
+docker compose run --rm --no-deps api python -m app.ui_demo_setup
+```
+
+`compose.yaml` runs PostgreSQL (the same digest as CI), a one-shot migration,
+the API on `127.0.0.1:8003`, the sandbox receiver with the outbox worker in
+its network namespace, and the page on `127.0.0.1:8501`. Images are built
+from `uv.lock` on digest-pinned bases and run as an unprivileged user;
+secrets come only from the environment. `app.smoke` drives the whole
+scenario over HTTP and waits for delivery. `docker compose down -v` removes
+the stack and its data. See [release](docs/instructions/release.md).
+
+## Backup and restore
+
+Set `DATABASE_URL` to the source database for export and to an empty target
+at the same revision for restore, verify and check.
+
+```bash
+uv run --locked python -m app.backup export var/backups/one
+uv run --locked python -m app.backup restore var/backups/one   # into an empty database
+uv run --locked python -m app.backup verify var/backups/one
+uv run --locked python -m app.backup check
+```
+
+A backup is one canonical JSON Lines file per table plus a manifest with
+row counts and SHA-256, taken from one consistent PostgreSQL snapshot. Restore works
+only into an empty database at the same Alembic revision and commits only
+if a fresh export of the restored data equals the manifest. `check`
+re-verifies stored hashes and reproduces every reconciliation. Backups hold
+document bytes and token hashes: keep them in `var/`, never in Git. See
+[backup](docs/instructions/backup.md).
+
+The sandbox receiver's SQLite database is outside this backup. Preserve its
+volume separately; this is not an atomic backup across PostgreSQL and the
+receiver. The CI restore cycle preserves the receiver volume.
+
 ## Stages
 
 | Stage | Deliverable | Status |
@@ -305,10 +361,11 @@ assistant runs per workflow per hour (`429 agent_run_limit`). See
 | 07 | Bounded AI tools, demo provider and optional real model | Implemented with offline providers; no real model |
 | 08 | Streamlit interface through the HTTP API | Implemented; verified locally and in a browser |
 | 09 | Security, failure scenarios, evals and local sandbox event delivery | Implemented; verified locally and in a browser |
-| 10 | Docker, expanded CI and reproducible release | Planned |
+| 10 | Docker, expanded CI and reproducible release | Implemented; compose stack verified locally; remote CI not verified |
 
 The [roadmap](docs/ROADMAP.md) defines the scope and acceptance criteria for each
-stage. Later modules are created with their first working feature.
+stage; all ten are implemented. [Limitations](docs/LIMITATIONS.md) lists what
+the release does not do and what was not verified.
 
 ## Checks
 
@@ -321,7 +378,8 @@ uv run --locked python scripts/check_docs.py
 ```
 
 Without `--group ui` the interface test modules are skipped. Rebuild both PDF
-guides after changing `app/`, `ui/`, `sandbox/`, migrations, `uv.lock` or
+guides after changing `app/`, `ui/`, `sandbox/`, migrations, `uv.lock`,
+`Dockerfile`, `.dockerignore`, `compose.yaml`, the CI workflow or
 `docs/guide/verification.json`; a test fails if they are stale:
 
 ```bash
@@ -332,20 +390,22 @@ Tests use temporary directories and in-process HTTP requests and never read a
 developer's `.env`. PostgreSQL integration tests run only when the process
 environment sets `TEST_DATABASE_URL` to a disposable database whose name ends in
 `_test`; otherwise they are reported as skipped. See
-[testing](docs/instructions/testing.md). CI starts a PostgreSQL service and is
-configured in [ci.yml](.github/workflows/ci.yml); a successful remote run has
-not been verified.
+[testing](docs/instructions/testing.md). CI runs three jobs — checks with a
+PostgreSQL service, the evaluation suite with a report artifact, and the
+compose stack with the smoke check and a backup cycle — configured in
+[ci.yml](.github/workflows/ci.yml); a successful remote run has not been
+verified.
 
 ## Documentation
 
 | Purpose | Source |
 | --- | --- |
 | Stage plan and completion criteria (RU) | [ROADMAP](docs/ROADMAP.md) |
-| Detailed learning guides (RU) | [STAGE 01](docs/STAGE_01.md), [STAGE 02](docs/STAGE_02.md), [STAGE 03](docs/STAGE_03.md), [STAGE 04](docs/STAGE_04.md), [STAGE 05](docs/STAGE_05.md), [STAGE 06](docs/STAGE_06.md), [STAGE 07](docs/STAGE_07.md), [STAGE 08](docs/STAGE_08.md), [STAGE 09](docs/STAGE_09.md) |
-| Short task instructions (EN) | [Quickstart](docs/instructions/quickstart.md), [API](docs/instructions/usage.md), [domain](docs/instructions/domain.md), [persistence](docs/instructions/persistence.md), [documents](docs/instructions/documents.md), [reconciliation](docs/instructions/reconciliation.md), [decisions](docs/instructions/decisions.md), [agent](docs/instructions/agent.md), [interface](docs/instructions/ui.md), [outbox delivery](docs/instructions/outbox.md), [evaluations](docs/instructions/evaluations.md), [testing](docs/instructions/testing.md), [project structure](docs/instructions/project-structure.md) |
-| Design and decisions (EN) | [Approach](docs/APPROACH.md), [ADR 0001](docs/adr/0001-modular-monolith-and-tooling.md), [ADR 0002](docs/adr/0002-domain-rules-and-workflow.md), [ADR 0003](docs/adr/0003-postgresql-persistence-audit-idempotency.md), [ADR 0004](docs/adr/0004-document-intake-and-field-provenance.md), [ADR 0005](docs/adr/0005-deterministic-reconciliation.md), [ADR 0006](docs/adr/0006-employee-decisions-and-outbox.md), [ADR 0007](docs/adr/0007-bounded-review-agent.md), [ADR 0008](docs/adr/0008-streamlit-client-over-http.md), [ADR 0009](docs/adr/0009-outbox-delivery-and-evaluations.md) |
+| Detailed learning guides (RU) | [STAGE 01](docs/STAGE_01.md), [STAGE 02](docs/STAGE_02.md), [STAGE 03](docs/STAGE_03.md), [STAGE 04](docs/STAGE_04.md), [STAGE 05](docs/STAGE_05.md), [STAGE 06](docs/STAGE_06.md), [STAGE 07](docs/STAGE_07.md), [STAGE 08](docs/STAGE_08.md), [STAGE 09](docs/STAGE_09.md), [STAGE 10](docs/STAGE_10.md) |
+| Short task instructions (EN) | [Quickstart](docs/instructions/quickstart.md), [API](docs/instructions/usage.md), [domain](docs/instructions/domain.md), [persistence](docs/instructions/persistence.md), [documents](docs/instructions/documents.md), [reconciliation](docs/instructions/reconciliation.md), [decisions](docs/instructions/decisions.md), [agent](docs/instructions/agent.md), [interface](docs/instructions/ui.md), [outbox delivery](docs/instructions/outbox.md), [evaluations](docs/instructions/evaluations.md), [release](docs/instructions/release.md), [backup](docs/instructions/backup.md), [testing](docs/instructions/testing.md), [project structure](docs/instructions/project-structure.md) |
+| Design and decisions (EN) | [Approach](docs/APPROACH.md), [ADR 0001](docs/adr/0001-modular-monolith-and-tooling.md), [ADR 0002](docs/adr/0002-domain-rules-and-workflow.md), [ADR 0003](docs/adr/0003-postgresql-persistence-audit-idempotency.md), [ADR 0004](docs/adr/0004-document-intake-and-field-provenance.md), [ADR 0005](docs/adr/0005-deterministic-reconciliation.md), [ADR 0006](docs/adr/0006-employee-decisions-and-outbox.md), [ADR 0007](docs/adr/0007-bounded-review-agent.md), [ADR 0008](docs/adr/0008-streamlit-client-over-http.md), [ADR 0009](docs/adr/0009-outbox-delivery-and-evaluations.md), [ADR 0010](docs/adr/0010-containers-and-logical-backups.md) |
 | CI explanation (RU) | [CI/CD](docs/CI_CD.md) |
-| Work completed and check evidence (RU) | [Development log](docs/DEVELOPMENT_LOG.md), [verification](docs/VERIFICATION.md) |
+| Work completed, check evidence and limitations (RU) | [Development log](docs/DEVELOPMENT_LOG.md), [verification](docs/VERIFICATION.md), [limitations](docs/LIMITATIONS.md) |
 | Visual PDF guides (RU and EN) | [Russian PDF](docs/guide/enterprise-workflow-agent-guide.pdf), [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf), [how they are built](docs/guide/README.md) |
 | Machine-readable status | [Verification JSON](docs/guide/verification.json) |
 | Contributor rules | [AGENTS.md](AGENTS.md) |
