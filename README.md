@@ -1,354 +1,29 @@
 # Enterprise Workflow Agent
 
-A staged Python learning project for a corporate document workflow. The target
-scenario reviews a supplier invoice against a purchase order: receive a
-document, extract fields with source evidence, apply corporate rules, show
-discrepancies, obtain an employee's decision and record the next process step.
-All examples will use fictional data.
+A staged Python learning project for reviewing a fictional supplier invoice
+against a purchase order: receive a document, extract fields with source
+evidence, reconcile amounts, obtain an employee's decision and record delivery
+to a local sandbox. **Release 0.10.0 implements all ten stages.**
 
-**Release 0.10.0: Stages 01–10 of the roadmap are implemented — API
-foundation, domain, PostgreSQL storage, document intake, deterministic
-reconciliation, employee decisions, a bounded review agent, a Streamlit
-interface over the HTTP API, signed outbox delivery with hardening and an
-evaluation suite, and a reproducible container release with verified
-backups.** It is a learning project on fictional data, not a production
-system; see the [limitations](docs/LIMITATIONS.md).
-The repository contains a FastAPI liveness endpoint, validated settings, exact
-money and purchasing models, seven basic validation reasons and an immutable
-workflow. Stage 03 persists it in PostgreSQL through Alembic migrations, with
-append-only hashed input versions, validation snapshots, a transactional audit
-trail, optimistic locking and idempotent commands. Stage 04 accepts bounded
-UTF-8 text and text-layer PDFs, extracts invoice fields deterministically and
-records the exact page and character span behind every value; incomplete
-extractions wait for review instead of producing an invoice. Stage 05
-reconciles invoice lines with the purchase order under versioned tolerance
-rules and stores reproducible snapshots that become stale when the order or
-rules change. Stage 06 adds employees with bearer tokens, roles and business
-units, a business HTTP API with document upload, and approval that must cite a
-fresh matched reconciliation snapshot, with four-eyes checking and an outbox
-event written in the same transaction. Stage 07 adds a bounded review agent
-behind a model-provider port: read-only tools with strict schemas and rights
-checks, limits on calls, time and result size, a check of the drafted next
-step against stored facts, and a trace without document text; it runs only
-deterministic offline providers. Stage 08 adds a Streamlit page for employees
-that reaches data only through the HTTP API, with intent-derived idempotency
-keys so repeated clicks and reloads never duplicate a command. Stage 09
-delivers decision events at least once to a fixed loopback sandbox receiver
-with HMAC signatures, bounded retries and delivery state visible to
-employees; it limits the PDF worker's CPU, memory (where the OS allows) and
-text, command request bodies and assistant runs, and adds 31 evaluation
-cases with explicit expected outcomes. Stage 10 builds digest-pinned images
-from `uv.lock`, runs the stack with Docker Compose on loopback ports, checks
-it end to end over HTTP, and exports, restores and verifies the data.
-Isolated tests, PostgreSQL integration tests, Ruff, strict mypy, a locked
-environment and three GitHub Actions jobs cover this work. Actual results and
-unverified items are recorded in [verification](docs/VERIFICATION.md); a real
-model adapter remains unimplemented.
+The FastAPI service uses PostgreSQL, immutable input versions, reproducible
+reconciliation snapshots, employee roles, audit records and idempotent commands.
+A bounded review agent reads facts through four tools and proposes a next step;
+it currently runs deterministic offline providers. An authorized employee makes
+the approval decision. A Streamlit page uses the HTTP API, while a signed outbox
+delivers events to a loopback sandbox with retries and deduplication. Docker
+Compose, a smoke scenario and PostgreSQL backup/restore support the local demo.
 
-The planned design is a modular monolith. Deterministic code calculates amounts,
-checks rules and controls state transitions. The AI assistant proposes fields and
-explanations; authorized employees make approval decisions. The tutorial does not
-initiate payments or act on real corporate systems.
+Deterministic Python controls money, rules, permissions and state changes. The
+project uses fictional data and initiates no payments. A real model adapter is
+not implemented. Local checks and unverified remote CI are recorded separately
+in [verification](docs/VERIFICATION.md) and [limitations](docs/LIMITATIONS.md).
 
-**Visual guides:** [Russian PDF](docs/guide/enterprise-workflow-agent-guide.pdf)
-and [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf),
-with diagrams and explanations for stages 01–10.
+**Начни с [быстрого запуска](docs/instructions/quickstart.md).** После запуска
+Compose страница сотрудника доступна на <http://127.0.0.1:8501>, Swagger UI —
+на <http://127.0.0.1:8003/docs>. Как получить токены вымышленных сотрудников,
+показано в [инструкции запуска](docs/instructions/quickstart.md#get-tokens-and-open-the-page).
 
-**По-русски:** основа API — [этап 01](docs/STAGE_01.md), предметная модель,
-правила и состояния — [этап 02](docs/STAGE_02.md), хранение, транзакции и
-аудит — [этап 03](docs/STAGE_03.md), документы и происхождение полей —
-[этап 04](docs/STAGE_04.md), сверка счёта с заказом — [этап 05](docs/STAGE_05.md),
-решение сотрудника, роли и outbox — [этап 06](docs/STAGE_06.md),
-ограниченный AI-агент — [этап 07](docs/STAGE_07.md), интерфейс Streamlit —
-[этап 08](docs/STAGE_08.md), доставка outbox, ограничения и оценки —
-[этап 09](docs/STAGE_09.md), воспроизводимый выпуск —
-[этап 10](docs/STAGE_10.md). Сводные ограничения —
-[LIMITATIONS.md](docs/LIMITATIONS.md).
-Все этапы и критерии готовности — в [дорожной карте](docs/ROADMAP.md).
-
-## Quickstart
-
-To run everything in containers instead, see
-[Docker Compose](#docker-compose). Natively, the requirements are
-[uv](https://docs.astral.sh/uv/getting-started/installation/) and Python 3.12.
-Run commands from this repository root. `uv` can install the matching Python
-if it is missing.
-
-```bash
-uv sync --locked
-uv run --locked uvicorn app.main:app --reload --host 127.0.0.1 --port 8003
-```
-
-In another terminal:
-
-```bash
-curl http://127.0.0.1:8003/health
-```
-
-Default response:
-
-```json
-{"status":"ok","service":"enterprise-workflow-agent"}
-```
-
-Open [Swagger UI](http://127.0.0.1:8003/docs) or
-[OpenAPI JSON](http://127.0.0.1:8003/openapi.json). `/health` and the API
-documentation need no database, model key or Docker; `/health` checks only
-that the API responds. Business endpoints need `DATABASE_URL` and a bearer
-token (see [Employee decisions and HTTP API](#employee-decisions-and-http-api))
-and otherwise answer `503`.
-
-Optional settings: `APP_NAME`, `APP_ENV` (`development`, `test`, `production`),
-`APP_DEBUG` (default `false`), `DATABASE_URL` (Stage 03+ commands and the
-business API), and `SANDBOX_WEBHOOK_URL` and `SANDBOX_WEBHOOK_SECRET` (the
-Stage 09 outbox worker). They can come from an optional `.env`, based on
-[.env.example](.env.example), or process environment variables. Explicit factory
-settings take priority, then environment variables, `.env`, and code defaults.
-`APP_ENV=production` is a validated label; it does not configure production
-security or deployment. Restart after changing settings.
-
-## Domain demonstration
-
-```bash
-uv run --locked python -m app.demo
-```
-
-The offline demo prints three fictional outcomes as JSON:
-
-- A `30.00 USD` invoice passes basic checks, then receives an explicit demo
-  decision: `received → awaiting_approval → approved`.
-- A declared `31.00 USD` against line totals and an order of `30.00 USD` produces
-  two findings and stays in `needs_review`.
-- A missing purchase order produces `missing_purchase_order` and requires review.
-
-Amounts remain decimal strings. No files, database, credentials or web server are
-needed. In this in-memory demo a `HumanDecision` is caller-provided metadata;
-stored decisions since Stage 06 come from an authenticated, authorized
-employee.
-
-Basic checks validate references, supplier, currency, self-total and an order
-total ceiling. Stage 05 implements detailed SKU/quantity/price matching,
-tolerances and duplicate invoice detection. Taxes are unsupported. Passing
-the basic checks alone is not proof of a fully reconciled invoice. See
-[domain usage](docs/instructions/domain.md).
-
-## PostgreSQL persistence
-
-Stage 03 needs PostgreSQL 18 (verified with 18.3) and a `DATABASE_URL` such as
-`postgresql+psycopg://enterprise_workflow:YOUR_PASSWORD@127.0.0.1:5432/enterprise_workflow`
-in the environment or an untracked `.env`:
-
-```bash
-uv run --locked alembic upgrade head
-uv run --locked python -m app.persistence_demo
-```
-
-The demo records fictional invoice, PO and policy versions, then runs start,
-check, an idempotent replay, a stale approval rejected with `version_conflict`,
-new PO and policy versions, revise, a re-check needing review and a rejection.
-It prints both validation snapshots and the audit trail; the earlier snapshot
-still references PO version 1. Read a run back in a new process with
-`uv run --locked python -m app.persistence_demo show WORKFLOW_ID`.
-
-Each command commits its idempotency record, snapshot, workflow update and
-audit event in one transaction. Since Stage 06 the demo registers a fictional
-approver for its decisions, and workflows belong to the unit `DEMO-UNIT`. See
-[persistence](docs/instructions/persistence.md).
-
-## Documents and field provenance
-
-```bash
-uv run --locked python -m app.documents_cli write-samples var/samples
-uv run --locked python -m app.documents_cli ingest var/samples/clean_invoice.pdf
-uv run --locked python -m app.documents_cli evidence DOCUMENT_ID declared_total
-uv run --locked python -m app.documents_cli demo
-```
-
-Files are accepted only as UTF-8 text or PDF with a text layer, up to 1 MiB,
-20 pages and 200 000 characters; format comes from the bytes, not the name.
-PDFs are parsed by pypdf in a separate `python -I` process that is killed after
-5 seconds. Refused files (`unsupported_type`, `too_large`, `no_text_layer`,
-`invalid_text_encoding` and others) are never stored, and `ingest` reports them
-without a database.
-
-A deterministic `Label: value` parser proposes fields; the domain accepts a
-value only if the text at each cited span equals it exactly, and only a
-complete, well-formed extraction becomes an invoice version that can start a
-workflow. `evidence` prints the page, line number, offsets and quote. Text
-inside a document is data: an "approve this invoice" sentence changes nothing.
-Requires `DATABASE_URL` and migration `0002` for storage. See
-[documents](docs/instructions/documents.md).
-
-## Reconciliation
-
-```bash
-uv run --locked python -m app.reconciliation_cli demo
-uv run --locked python -m app.reconciliation_cli show SNAPSHOT_ID
-```
-
-A versioned rule set gives per-currency, inclusive tolerances for unit prices
-and totals and states its rounding (`ROUND_HALF_UP`, two decimals). Lines are
-matched by SKU; thirteen codes cover missing documents, orders or currency
-rules, duplicates, header and currency differences, unknown lines,
-quantities, prices and totals. Each discrepancy shows expected and actual
-values, the rule applied and a quote from the source document. Snapshots pin
-every input version and hash, are reused for identical inputs, report
-staleness after newer order or rule versions, and recompute exactly. Since
-Stage 06 approval requires a fresh matched snapshot. See
-[reconciliation](docs/instructions/reconciliation.md).
-
-## Employee decisions and HTTP API
-
-```bash
-uv run --locked python -m app.users_cli create demo-approver --name "Fictional approver" --role approver --unit DEMO-UNIT-A
-uv run --locked python -m app.users_cli token demo-approver
-uv run --locked python -m app.decisions_demo
-uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8003
-```
-
-Roles `viewer`, `clerk` and `approver` grant `view`, `submit`, `reconcile`
-and `decide` (and, since Stage 07, `assist`) within the user's business units; another unit's workflow is
-`404`. Tokens are shown once and stored as SHA-256; revocation and
-deactivation apply to the next request. Services re-check the user inside each
-command's transaction. Approval cites a reconciliation snapshot and is refused
-for a missing role, another unit, the workflow's own starter, a stale version,
-a stale or unmatched snapshot, or a forbidden transition. Order, rule and
-duplicate writers wait on the same PostgreSQL advisory locks as approval. The
-decision, an `invoice.approved` or `invoice.rejected` outbox event and the
-audit event commit together; since Stage 09 the outbox worker delivers the
-event (see [Outbox delivery](#outbox-delivery)). Commands
-need an `Idempotency-Key` header. See [decisions](docs/instructions/decisions.md)
-and [API usage](docs/instructions/usage.md).
-
-## Bounded review agent
-
-```bash
-uv run --locked python -m app.agent_demo
-uv run --locked python -m app.agent_demo show RUN_ID
-```
-
-A model behind the `ModelProvider` port may call four read-only tools
-(`get_workflow`, `get_reconciliation`, `get_extracted_fields`,
-`get_audit_trail`) and must answer with an explanation and one of four draft
-next steps. Code validates every call against a strict schema, keeps the
-agent to the run's workflow and the employee's rights, limits provider calls,
-tool calls, refusals, wall time and result size, and replaces an unsupported
-draft with `needs_human_review`. There is no approve, reject, pay or
-code-execution tool, and a draft never changes the workflow. Text from a
-document that tells the model to approve is refused as an unknown tool. The
-trace stores names, codes, sizes and hashes, not prompts, document text or the
-explanation. Stage 07 uses a rule-based demo provider and scripted providers
-only; no network or real model. `POST /workflows/{id}/agent-runs` needs the
-`assist` permission (clerks and approvers). `ModelFieldExtractor` lets a
-model propose fields through the Stage 04 port; the evidence check still
-applies. See [agent](docs/instructions/agent.md).
-
-## Employee interface
-
-```bash
-uv sync --locked --group ui
-uv run --locked python -m app.ui_demo_setup
-uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8003
-uv run --locked --group ui python -m streamlit run ui/app.py
-```
-
-The setup command prints fresh tokens for four fictional employees and writes
-three sample invoices to `var/ui-samples/`. The page (`http://127.0.0.1:8501`)
-lists workflows of the employee's units, shows document fields with their
-source lines, reconciliation with quoted discrepancies, the assistant's draft,
-the audit trail and outbox events, and sends check, reconcile, revise,
-approve and reject commands. It never reads the database or checks business
-rules itself; refusals are shown with the server's code and a hint. Streamlit
-is in the separate `ui` dependency group. Since Stage 09 it also shows each
-event's delivery status and an error for exhausted deliveries. See
-[interface](docs/instructions/ui.md).
-
-## Outbox delivery
-
-```bash
-export SANDBOX_WEBHOOK_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-uv run --locked python -m sandbox.receiver
-uv run --locked python -m app.outbox_worker run
-uv run --locked python -m app.outbox_worker status
-uv run --locked python -m app.outbox_demo
-```
-
-The decision's transaction also creates a `pending` delivery. The worker
-claims one due event at a time with `FOR UPDATE SKIP LOCKED`, signs the
-canonical JSON body with HMAC-SHA256 and a timestamp, sends it to
-`SANDBOX_WEBHOOK_URL` (only `127.0.0.1` or `[::1]`; no proxies, no redirects)
-and records the attempt. Failures retry after 2, 4, 8 and 16 seconds; after
-five the event is `exhausted` until an operator runs `requeue`. Delivery is
-at least once: the sandbox receiver (`sandbox/`, which imports nothing from
-`app`) verifies the signature and timestamp and takes one action per event
-ID, answering repeats as `duplicate`. The API and the page show status,
-attempts and the last error. See [outbox delivery](docs/instructions/outbox.md).
-
-## Evaluations and limits
-
-```bash
-uv run --locked python -m app.evals list
-uv run --locked python -m app.evals run
-```
-
-31 cases in nine categories (injection, wrong fields, ambiguous data, provider
-failure, timeout, retry, concurrency, malicious documents, access) state
-their expected outcome in advance; the run writes JSON and Markdown reports
-with limitations to `var/evals/`. Only deterministic providers are used, and
-passing the suite is not a claim of production readiness. Stage 09 also
-limits the PDF worker's CPU time, memory (`RLIMIT_AS`, enforced on Linux, not
-on macOS) and extracted text (`resource_limit`, `text_too_long`), refuses
-command bodies over 64 KiB or without a length (`413`, `411`), and allows 20
-assistant runs per workflow per hour (`429 agent_run_limit`). See
-[evaluations](docs/instructions/evaluations.md).
-
-## Docker Compose
-
-The commands below use OpenSSL to generate secrets. Alternatively, set two
-independent random secrets of at least 32 characters manually; the container
-stack needs no host Python or uv.
-
-```bash
-export POSTGRES_PASSWORD="$(openssl rand -hex 24)"
-export SANDBOX_WEBHOOK_SECRET="$(openssl rand -hex 24)"
-docker compose up -d --build --wait
-docker compose run --rm --no-deps api python -m app.smoke --api http://api:8003
-docker compose run --rm --no-deps api python -m app.ui_demo_setup
-```
-
-`compose.yaml` runs PostgreSQL (the same digest as CI), a one-shot migration,
-the API on `127.0.0.1:8003`, the sandbox receiver with the outbox worker in
-its network namespace, and the page on `127.0.0.1:8501`. Images are built
-from `uv.lock` on digest-pinned bases and run as an unprivileged user;
-secrets come only from the environment. `app.smoke` drives the whole
-scenario over HTTP and waits for delivery. `docker compose down -v` removes
-the stack and its data. See [release](docs/instructions/release.md).
-
-## Backup and restore
-
-Set `DATABASE_URL` to the source database for export and to an empty target
-at the same revision for restore, verify and check.
-
-```bash
-uv run --locked python -m app.backup export var/backups/one
-uv run --locked python -m app.backup restore var/backups/one   # into an empty database
-uv run --locked python -m app.backup verify var/backups/one
-uv run --locked python -m app.backup check
-```
-
-A backup is one canonical JSON Lines file per table plus a manifest with
-row counts and SHA-256, taken from one consistent PostgreSQL snapshot. Restore works
-only into an empty database at the same Alembic revision and commits only
-if a fresh export of the restored data equals the manifest. `check`
-re-verifies stored hashes and reproduces every reconciliation. Backups hold
-document bytes and token hashes: keep them in `var/`, never in Git. See
-[backup](docs/instructions/backup.md).
-
-The sandbox receiver's SQLite database is outside this backup. Preserve its
-volume separately; this is not an atomic backup across PostgreSQL and the
-receiver. The CI restore cycle preserves the receiver volume.
-
-## Stages
+## Roadmap
 
 | Stage | Deliverable | Status |
 | --- | --- | --- |
@@ -367,45 +42,37 @@ The [roadmap](docs/ROADMAP.md) defines the scope and acceptance criteria for eac
 stage; all ten are implemented. [Limitations](docs/LIMITATIONS.md) lists what
 the release does not do and what was not verified.
 
-## Checks
-
-```bash
-uv run --locked ruff check .
-uv run --locked ruff format --check .
-uv run --locked --group ui mypy app tests scripts migrations ui sandbox
-uv run --locked --group ui pytest
-uv run --locked python scripts/check_docs.py
-```
-
-Without `--group ui` the interface test modules are skipped. Rebuild both PDF
-guides after changing `app/`, `ui/`, `sandbox/`, migrations, `uv.lock`,
-`Dockerfile`, `.dockerignore`, `compose.yaml`, the CI workflow or
-`docs/guide/verification.json`; a test fails if they are stale:
-
-```bash
-uv run --locked --group guide python scripts/build_guide.py
-```
-
-Tests use temporary directories and in-process HTTP requests and never read a
-developer's `.env`. PostgreSQL integration tests run only when the process
-environment sets `TEST_DATABASE_URL` to a disposable database whose name ends in
-`_test`; otherwise they are reported as skipped. See
-[testing](docs/instructions/testing.md). CI runs three jobs — checks with a
-PostgreSQL service, the evaluation suite with a report artifact, and the
-compose stack with the smoke check and a backup cycle — configured in
-[ci.yml](.github/workflows/ci.yml); a successful remote run has not been
-verified.
-
 ## Documentation
 
-| Purpose | Source |
-| --- | --- |
-| Stage plan and completion criteria (RU) | [ROADMAP](docs/ROADMAP.md) |
-| Detailed learning guides (RU) | [STAGE 01](docs/STAGE_01.md), [STAGE 02](docs/STAGE_02.md), [STAGE 03](docs/STAGE_03.md), [STAGE 04](docs/STAGE_04.md), [STAGE 05](docs/STAGE_05.md), [STAGE 06](docs/STAGE_06.md), [STAGE 07](docs/STAGE_07.md), [STAGE 08](docs/STAGE_08.md), [STAGE 09](docs/STAGE_09.md), [STAGE 10](docs/STAGE_10.md) |
-| Short task instructions (EN) | [Quickstart](docs/instructions/quickstart.md), [API](docs/instructions/usage.md), [domain](docs/instructions/domain.md), [persistence](docs/instructions/persistence.md), [documents](docs/instructions/documents.md), [reconciliation](docs/instructions/reconciliation.md), [decisions](docs/instructions/decisions.md), [agent](docs/instructions/agent.md), [interface](docs/instructions/ui.md), [outbox delivery](docs/instructions/outbox.md), [evaluations](docs/instructions/evaluations.md), [release](docs/instructions/release.md), [backup](docs/instructions/backup.md), [testing](docs/instructions/testing.md), [project structure](docs/instructions/project-structure.md) |
-| Design and decisions (EN) | [Approach](docs/APPROACH.md), [ADR 0001](docs/adr/0001-modular-monolith-and-tooling.md), [ADR 0002](docs/adr/0002-domain-rules-and-workflow.md), [ADR 0003](docs/adr/0003-postgresql-persistence-audit-idempotency.md), [ADR 0004](docs/adr/0004-document-intake-and-field-provenance.md), [ADR 0005](docs/adr/0005-deterministic-reconciliation.md), [ADR 0006](docs/adr/0006-employee-decisions-and-outbox.md), [ADR 0007](docs/adr/0007-bounded-review-agent.md), [ADR 0008](docs/adr/0008-streamlit-client-over-http.md), [ADR 0009](docs/adr/0009-outbox-delivery-and-evaluations.md), [ADR 0010](docs/adr/0010-containers-and-logical-backups.md) |
-| CI explanation (RU) | [CI/CD](docs/CI_CD.md) |
-| Work completed, check evidence and limitations (RU) | [Development log](docs/DEVELOPMENT_LOG.md), [verification](docs/VERIFICATION.md), [limitations](docs/LIMITATIONS.md) |
-| Visual PDF guides (RU and EN) | [Russian PDF](docs/guide/enterprise-workflow-agent-guide.pdf), [English PDF](docs/guide/enterprise-workflow-agent-guide-en.pdf), [how they are built](docs/guide/README.md) |
-| Machine-readable status | [Verification JSON](docs/guide/verification.json) |
-| Contributor rules | [AGENTS.md](AGENTS.md) |
+Instructions ([docs/instructions/](docs/instructions/)):
+
+- [Quickstart](docs/instructions/quickstart.md): requirements, Compose, employee tokens, host run and settings
+- [Using the system](docs/instructions/usage.md): roles, HTTP API, domain, storage, documents, reconciliation, decisions, review agent, delivery, employee page, evaluations and command-line tools
+- [Testing and verification](docs/instructions/testing.md): lint, strict types, offline and PostgreSQL tests, PDF freshness
+- [Backup and restore](docs/instructions/backup.md): PostgreSQL export, empty-database restore, integrity checks and scope
+- [CI and container delivery](docs/instructions/ci-and-delivery.md): images, HTTP smoke and GitHub Actions jobs
+- [Project structure](docs/instructions/project-structure.md): application layers, tools, tests and documentation
+
+Stage learning guides in Russian:
+
+- [Stage 01: FastAPI foundation](docs/STAGE_01.md)
+- [Stage 02: domain, rules and workflow](docs/STAGE_02.md)
+- [Stage 03: PostgreSQL, transactions and audit](docs/STAGE_03.md)
+- [Stage 04: document intake and field evidence](docs/STAGE_04.md)
+- [Stage 05: invoice reconciliation](docs/STAGE_05.md)
+- [Stage 06: employee decisions, roles and outbox](docs/STAGE_06.md)
+- [Stage 07: bounded review agent](docs/STAGE_07.md)
+- [Stage 08: Streamlit employee page](docs/STAGE_08.md)
+- [Stage 09: delivery, hardening and evaluations](docs/STAGE_09.md)
+- [Stage 10: containers and verified backups](docs/STAGE_10.md)
+- [Stage plan and completion criteria](docs/ROADMAP.md)
+- [CI/CD walkthrough](docs/CI_CD.md)
+- [Russian PDF guide](docs/guide/enterprise-workflow-agent-guide.pdf), [English PDF guide](docs/guide/enterprise-workflow-agent-guide-en.pdf) and [rebuild instructions](docs/guide/README.md)
+- [Verification report](docs/VERIFICATION.md), [machine-readable evidence](docs/guide/verification.json) and [limitations](docs/LIMITATIONS.md)
+
+Design and history:
+
+- [Solution approach](docs/APPROACH.md)
+- [Architecture decisions](docs/adr/)
+- [Development log](docs/DEVELOPMENT_LOG.md)
+- [Contributor rules](AGENTS.md)

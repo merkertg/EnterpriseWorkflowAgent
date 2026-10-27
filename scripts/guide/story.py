@@ -667,17 +667,25 @@ def _results(story: list[Any], verification: dict[str, Any]) -> None:
     environment = verification["environment"]
     tests = verification["tests"]
     remote = verification["remote_ci"]
+    documentation = verification["documentation_verification"]
+    offline = documentation["tests_without_database"]
     story += [
         p(
             tr(
-                f"Дата проверки: {verification['verified_on']} ({verification['timezone']}). "
+                f"Полная проверка этапа: {verification['verified_on']} ({verification['timezone']}). "
                 f"Базовый коммит: {verification['git']['base_commit']}. "
                 f"Python {environment['python']}, uv {environment['uv']}, "
-                f"PostgreSQL {environment['postgresql'].split()[0]}.",
-                f"Verified on {verification['verified_on']} ({verification['timezone']}). "
+                f"PostgreSQL {environment['postgresql'].split()[0]}. "
+                f"Документация: {documentation['verified_on']}; без базы "
+                f"{offline['passed']} прошли, {offline['skipped']} пропущены. "
+                "PostgreSQL, Docker и оценки повторно не запускались.",
+                f"Full stage verification: {verification['verified_on']} ({verification['timezone']}). "
                 f"Base commit: {verification['git']['base_commit']}. "
                 f"Python {environment['python']}, uv {environment['uv']}, "
-                f"PostgreSQL {environment['postgresql'].split()[0]}.",
+                f"PostgreSQL {environment['postgresql'].split()[0]}. "
+                f"Documentation: {documentation['verified_on']}; offline "
+                f"{offline['passed']} passed, {offline['skipped']} skipped. "
+                "PostgreSQL, Docker and evaluations were not rerun.",
             )
         ),
         Spacer(1, 6),

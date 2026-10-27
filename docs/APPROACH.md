@@ -11,7 +11,7 @@ documents, users and amounts. The intended workflow is:
 3. Validate the fields and reconcile the invoice with the PO using deterministic
    rules, retaining the exact input versions in the result.
 4. Show discrepancies and request an authorized employee's decision.
-5. Record the decision and, in a later stage, demonstrate the next step through
+5. Record the decision and demonstrate the next step through
    a signed event delivered to a fixed local demo receiver.
 
 This is two-document reconciliation between an invoice and a purchase order.

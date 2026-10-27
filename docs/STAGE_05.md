@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Дорожная карта](ROADMAP.md) ·
 [Проверка](VERIFICATION.md) ·
-[Краткая инструкция на английском](instructions/reconciliation.md) ·
+[Краткая инструкция на английском](instructions/usage.md#reconciliation) ·
 [ADR 0005](adr/0005-deterministic-reconciliation.md)
 
 ## 1. Что делает этот этап

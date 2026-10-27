@@ -1,8 +1,6 @@
 # Backup and restore of the learning data
 
-[README](../../README.md) · [Stage 10 guide (RU)](../STAGE_10.md) ·
-[ADR 0010](../adr/0010-containers-and-logical-backups.md) ·
-[Release](release.md)
+[← README](../../README.md) · [All documentation](../../README.md#documentation)
 
 `python -m app.backup` makes a logical, verifiable copy of every application
 table and loads it into an empty database. All commands need `DATABASE_URL`.

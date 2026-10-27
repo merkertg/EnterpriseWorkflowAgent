@@ -1,6 +1,6 @@
 # Testing and verification
 
-[README](../../README.md) · [Stage 01 explanation](../STAGE_01.md)
+[← README](../../README.md) · [All documentation](../../README.md#documentation)
 
 Run from the repository root:
 
@@ -162,7 +162,7 @@ for a non-empty target, a changed file, another revision and a reused
 directory, an integrity check that finds edited document bytes, and the
 smoke check against a real HTTP server, receiver and worker thread. The
 Docker stack itself is checked by hand and by the CI `compose` job; see
-[release](release.md).
+[release](ci-and-delivery.md).
 
 `tests/test_guide_pdfs.py` checks both PDF guides with pypdf: the source
 fingerprint stored in each PDF must match a fresh hash of the generator,
@@ -172,7 +172,7 @@ fails, rebuild with `uv run --locked --group guide python scripts/build_guide.py
 and inspect every page as described in the [guide README](../guide/README.md).
 
 Run the fictional scenarios directly with
-`uv run --locked python -m app.demo`; see [domain usage](domain.md). A successful
+`uv run --locked python -m app.demo`; see [domain usage](usage.md#domain-rules-and-workflow-states). A successful
 basic check does not prove detailed reconciliation; approval additionally
 requires a fresh matched reconciliation and an authorized employee.
 

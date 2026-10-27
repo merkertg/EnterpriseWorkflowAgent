@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Дорожная карта](ROADMAP.md) ·
 [Проверка](VERIFICATION.md) ·
-[Краткая инструкция на английском](instructions/persistence.md) ·
+[Краткая инструкция на английском](instructions/usage.md#storage-versions-and-audit) ·
 [ADR 0003](adr/0003-postgresql-persistence-audit-idempotency.md)
 
 ## 1. Что делает этот этап

@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Дорожная карта](ROADMAP.md) ·
 [Проверка](VERIFICATION.md) ·
-[Краткая инструкция на английском](instructions/documents.md) ·
+[Краткая инструкция на английском](instructions/usage.md#documents-and-field-evidence) ·
 [ADR 0004](adr/0004-document-intake-and-field-provenance.md)
 
 ## 1. Что делает этот этап

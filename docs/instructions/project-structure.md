@@ -1,6 +1,6 @@
 # Project structure
 
-[README](../../README.md) · [Detailed Russian guide](../STAGE_01.md)
+[← README](../../README.md) · [All documentation](../../README.md#documentation)
 
 Keep the initial application small and add a layer when it owns real behavior.
 
@@ -98,35 +98,22 @@ and services; without `DATABASE_URL` business endpoints answer 503.
 
 | Location | Purpose |
 | --- | --- |
-| `README.md` | Entry point and current project status |
-| `docs/STAGE_01.md` | Detailed learning walkthrough in Russian |
-| `docs/STAGE_02.md` | Domain, rules, money and workflow walkthrough in Russian |
-| `docs/STAGE_03.md` | PostgreSQL, transactions, audit and idempotency walkthrough in Russian |
-| `docs/instructions/domain.md` | Concise Python domain usage and demo commands |
-| `docs/instructions/persistence.md` | Database setup, migrations, demo and service rules |
-| `docs/STAGE_04.md` | Document intake and field provenance walkthrough in Russian |
-| `docs/instructions/documents.md` | Intake limits, field schema, parser, storage and commands |
-| `docs/STAGE_05.md` | Reconciliation walkthrough in Russian |
-| `docs/instructions/reconciliation.md` | Rules, codes, snapshots, freshness and commands |
-| `docs/STAGE_06.md` | Employee decisions, roles, tokens, locks and outbox walkthrough in Russian |
-| `docs/instructions/decisions.md` | Roles, account commands, approval checks, outbox and demo |
-| `docs/instructions/usage.md` | HTTP endpoints, authentication, idempotency and error codes |
-| `docs/STAGE_07.md` | Bounded agent, tools, limits, draft check and traces walkthrough in Russian |
-| `docs/instructions/agent.md` | Agent provider port, tools, limits, draft check, traces and demo |
-| `docs/STAGE_08.md` | Streamlit interface, HTTP client, repeated clicks and errors walkthrough in Russian |
-| `docs/instructions/ui.md` | Running the interface, pages, keys, errors and tests |
-| `docs/STAGE_09.md` | Outbox delivery, hardening and evaluations walkthrough in Russian |
-| `docs/instructions/outbox.md` | Delivery worker, receiver, signature, states and commands |
-| `docs/instructions/evaluations.md` | Evaluation categories, commands, reports and limits |
-| `docs/STAGE_10.md` | Images, compose, smoke check, backups and CI walkthrough in Russian |
-| `docs/instructions/release.md` | Running the compose stack, services, images and CI jobs |
+| `README.md` | Entry point: what the project is, the roadmap and the documentation index |
+| `AGENTS.md` | Contributor and agent rules |
+| `docs/instructions/quickstart.md` | Requirements, Compose stack, tokens, host run and settings |
+| `docs/instructions/usage.md` | Roles and tokens, HTTP API, domain, storage, documents, reconciliation, decisions, agent, delivery, page, evaluations, command-line tools |
+| `docs/instructions/testing.md` | Lint, types, tests with and without PostgreSQL |
 | `docs/instructions/backup.md` | Backup format, restore rules, checks and safety |
+| `docs/instructions/ci-and-delivery.md` | Images, smoke check and GitHub Actions jobs |
+| `docs/instructions/project-structure.md` | This map of code and documents |
+| `docs/STAGE_01.md` … `docs/STAGE_10.md` | Detailed learning guides per stage, in Russian |
+| `docs/CI_CD.md` | CI configuration and limits of remote verification, in Russian |
+| `docs/ROADMAP.md` | Stage plan and completion criteria, in Russian |
 | `docs/LIMITATIONS.md` | Every known limitation and the three kinds of evidence, in Russian |
-| `docs/instructions/` | Short operational instructions in English |
-| `docs/CI_CD.md` | CI configuration and limits of remote verification |
-| `docs/VERIFICATION.md` | Recorded command outcomes and limitations |
-| `docs/guide/verification.json` | Machine-readable verification summary |
-| `docs/guide/README.md` | How the RU/EN PDF guides are built, checked and updated |
+| `docs/VERIFICATION.md` | Recorded command outcomes and limitations, in Russian |
+| `docs/DEVELOPMENT_LOG.md` | What changed, stage by stage, in Russian |
+| `docs/APPROACH.md`, `docs/adr/` | Design approach and the ten architecture decision records |
+| `docs/guide/` | RU/EN PDF guides, `verification.json`, how they are built, and `archive/` with earlier versions |
 
 ## Planned locations
 

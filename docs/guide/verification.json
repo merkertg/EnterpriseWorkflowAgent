@@ -18,9 +18,10 @@
   "timezone": "Asia/Tashkent",
   "git": {
     "base_commit": "92604c6",
-    "scope": "uncommitted_working_tree",
-    "committed": false,
-    "pushed": false
+    "scope": "historical_stage_10_snapshot",
+    "committed": true,
+    "pushed": true,
+    "published_commit": "b85c32ac1be4faac8035e420879841e2a754eaaf"
   },
   "environment": {
     "platform": "macOS ARM64",
@@ -442,5 +443,39 @@
   "stage_10_new_tests": {
     "without_database": 93,
     "with_database": 8
+  },
+  "documentation_verification": {
+    "verified_on": "2026-10-27",
+    "timezone": "Asia/Yekaterinburg",
+    "base_commit": "b85c32ac1be4faac8035e420879841e2a754eaaf",
+    "scope": "Documentation structure alignment; application, migrations, dependencies and workflow unchanged",
+    "tests_without_database": {
+      "passed": 541,
+      "failed": 0,
+      "skipped": 126,
+      "postgres_skipped": 125,
+      "platform_skipped": 1
+    },
+    "checks": {
+      "ruff": "passed",
+      "ruff_format": "passed",
+      "mypy": "passed",
+      "mypy_source_files": 174,
+      "documentation_links": 242,
+      "markdown_files": 36,
+      "markdown_anchors": 37,
+      "git_diff_check": "passed"
+    },
+    "pdf": {
+      "languages": [
+        "ru",
+        "en"
+      ],
+      "pages_per_language": 41,
+      "visual_review": "all pages rendered and inspected"
+    },
+    "database_docker_evaluations": "not rerun; historical stage 10 evidence above is dated 2026-10-24",
+    "remote_ci": "not_verified",
+    "sandbox_note": "Initial webhook tests could not bind loopback; the complete offline suite passed with local network permission."
   }
 }

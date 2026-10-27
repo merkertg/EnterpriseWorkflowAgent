@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Дорожная карта](ROADMAP.md) ·
 [Проверка](VERIFICATION.md) · [Ограничения](LIMITATIONS.md) ·
-[Выпуск (англ.)](instructions/release.md) ·
+[Выпуск (англ.)](instructions/ci-and-delivery.md) ·
 [Резервная копия (англ.)](instructions/backup.md) ·
 [ADR 0010](adr/0010-containers-and-logical-backups.md)
 

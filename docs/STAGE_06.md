@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Дорожная карта](ROADMAP.md) ·
 [Проверка](VERIFICATION.md) ·
-[Краткая инструкция на английском](instructions/decisions.md) ·
+[Краткая инструкция на английском](instructions/usage.md#approval-and-the-outbox) ·
 [HTTP API](instructions/usage.md) ·
 [ADR 0006](adr/0006-employee-decisions-and-outbox.md)
 

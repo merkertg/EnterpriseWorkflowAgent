@@ -1,113 +1,130 @@
 # Quickstart
 
-[README](../../README.md) · [Detailed Stage 01 guide in Russian](../STAGE_01.md)
+[← README](../../README.md) · [All documentation](../../README.md#documentation)
 
-Stages 01–06 provide a local FastAPI service, an in-memory domain
-demonstration, PostgreSQL persistence, document intake, reconciliation and
-employee decisions. `/health` works without a database; the business endpoints
-need `DATABASE_URL`, an upgraded schema and a bearer token.
+Start the whole stack with Docker Compose, get fictional employee tokens and
+open the page, or run the API and its tools directly on the host.
 
-## Prepare
+## Requirements
 
-Requirements: uv and Python 3.12. uv can provision the interpreter if needed.
-Run commands from the directory containing `pyproject.toml`:
+- **Compose stack:** Docker Engine or Docker Desktop with Compose v2. No Python
+  or uv is needed on the host. The snippets use OpenSSL to generate secrets;
+  it is normally available on macOS and Ubuntu.
+- **Host run:** [uv](https://docs.astral.sh/uv/getting-started/installation/)
+  and Python 3.12 (`>=3.12,<3.13`; uv can provision it), plus PostgreSQL 18 for
+  everything beyond `/health` and the offline domain demo.
+
+Verified on macOS (Apple Silicon) only; see
+[LIMITATIONS.md](../LIMITATIONS.md).
+
+## Start the stack with Docker Compose
 
 ```bash
-uv --version
+export POSTGRES_PASSWORD="$(openssl rand -hex 24)"
+export SANDBOX_WEBHOOK_SECRET="$(openssl rand -hex 24)"
+docker compose up -d --build --wait
+docker compose run --rm --no-deps api python -m app.smoke --api http://api:8003
+```
+
+Compose refuses to start without both variables. They may also live in a
+local `.env` next to `compose.yaml` (ignored by Git); never commit them. The
+smoke check drives the whole scenario over HTTP and waits until the decision
+event is delivered; it exits 0 only if every step matched.
+
+| Service | Image | Role |
+| --- | --- | --- |
+| `postgres` | `postgres:18.3@sha256:…` (same digest as CI) | Database, volume `pgdata` |
+| `migrate` | `app` | `alembic upgrade head`, then exits |
+| `api` | `app` | Uvicorn on `127.0.0.1:8003` with a `/health` health check |
+| `receiver` | `app` | Sandbox webhook receiver on `127.0.0.1:8010` in its own network namespace, volume `receiver` |
+| `worker` | `app` | Outbox worker sharing the receiver's network namespace, so the destination stays loopback |
+| `ui` | `ui` | Streamlit on `127.0.0.1:8501` with `/_stcore/health`, calling the API at `http://api:8003` |
+
+## Get tokens and open the page
+
+```bash
+docker compose run --rm --no-deps api python -m app.ui_demo_setup
+```
+
+The command prints fresh tokens for four fictional employees (`ui-clerk`,
+`ui-approver`, `ui-viewer`, `ui-outsider`) once and records the reference data
+the page uses by default. Open:
+
+| URL | What |
+| --- | --- |
+| `http://127.0.0.1:8501` | Employee page: paste a token |
+| `http://127.0.0.1:8003/docs` | Swagger UI: authorize with a token |
+
+How to work with the page, the API and every tool is described in
+[usage](usage.md).
+
+## Stop or update the stack
+
+```bash
+docker compose down                     # stop, keep the data volumes
+docker compose up -d --build --wait     # rebuild after pulling new code
+docker compose down -v                  # also delete the database and receiver data
+```
+
+Migrations run automatically on every start through the `migrate` service.
+Before deleting volumes, make a [backup](backup.md) if the data matters.
+
+## Run on the host
+
+Install the locked dependencies (add `--group ui` for the page):
+
+```bash
 uv sync --locked
-uv run --locked python --version
-```
-
-The supported Python range is `>=3.12,<3.13`. Use `uv run --locked` rather than
-the system Python. `uv sync --locked` installs the resolved dependencies and
-fails if the lock file needs an update.
-
-All current settings have defaults, so `.env` is optional. To customize them,
-inspect `.env.example` and create `.env` only if it does not already exist.
-Keep an existing `.env`; do not overwrite local settings.
-
-## Run
-
-```bash
+uv run --locked python -m app.demo                # offline domain demo
 uv run --locked uvicorn app.main:app --reload --host 127.0.0.1 --port 8003
-```
-
-Keep this terminal open. In a second terminal:
-
-```bash
 curl -i http://127.0.0.1:8003/health
 ```
 
-Expected default response: HTTP `200` and
-`{"status":"ok","service":"enterprise-workflow-agent"}`.
+`/health` answers `{"status":"ok","service":"enterprise-workflow-agent"}`
+without a database. For everything else create PostgreSQL databases (the test
+database name must end in `_test`):
 
-Open [Swagger UI](http://127.0.0.1:8003/docs),
-[ReDoc](http://127.0.0.1:8003/redoc), or
-[OpenAPI JSON](http://127.0.0.1:8003/openapi.json).
-Stop the server with `Ctrl+C`. If port 8003 is busy, select another port and
-use it consistently in the URLs.
+```bash
+createuser --pwprompt enterprise_workflow
+createdb --owner enterprise_workflow enterprise_workflow
+createdb --owner enterprise_workflow enterprise_workflow_test
+```
+
+Put `DATABASE_URL` in the environment or an untracked `.env`, migrate, then
+start what you need:
+
+```bash
+export DATABASE_URL=postgresql+psycopg://enterprise_workflow:YOUR_PASSWORD@127.0.0.1:5432/enterprise_workflow
+uv run --locked alembic upgrade head
+uv run --locked python -m app.ui_demo_setup
+uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8003
+uv run --locked --group ui python -m streamlit run ui/app.py
+uv run --locked python -m sandbox.receiver                # needs SANDBOX_WEBHOOK_SECRET
+uv run --locked python -m app.outbox_worker run           # same secret and DATABASE_URL
+```
+
+Keep each long-running command in its own terminal. If port 8003 is busy,
+choose another port and use it consistently.
 
 ## Settings
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `APP_NAME` | `enterprise-workflow-agent` | Service name; surrounding whitespace is removed and an empty name is rejected |
-| `APP_ENV` | `development` | One of `development`, `test`, `production` |
+| `APP_ENV` | `development` | One of `development`, `test`, `production` (a label, not a deployment mode) |
 | `APP_DEBUG` | `false` | Local debugging; it does not grant access permissions |
 | `DATABASE_URL` | unset | `postgresql+psycopg://...` URL for migrations, command-line tools and the business API; hidden in settings output |
 | `DATABASE_HOST`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD` | unset | Alternative raw connection components; all four are required together |
 | `DATABASE_PORT` | `5432` | Component connection port, 1–65535 |
 | `SANDBOX_WEBHOOK_URL` | `http://127.0.0.1:8010/webhook` | The only outbox destination; must be http(s) on `127.0.0.1` or `[::1]` |
-| `SANDBOX_WEBHOOK_SECRET` | unset | Signing secret for the outbox worker (32+ characters); hidden in settings output |
+| `SANDBOX_WEBHOOK_SECRET` | unset | Signing secret for the outbox worker and receiver (32+ characters); hidden in settings output |
+| `POSTGRES_PASSWORD` | unset | Compose only: the database password, required |
+| `EWA_API_URL`, `EWA_UI_POLICY_ID`, `EWA_UI_RULES_ID` | see [usage](usage.md#employee-page) | Page defaults |
 
-Environment variables override `.env`, which overrides defaults. Explicit
-`Settings(...)` constructor arguments have higher priority. Unknown `.env`
-keys are ignored. Settings are cached; restart the server after changes.
-
-An explicit `DATABASE_URL` takes priority over the components. Compose supplies
-raw components so reserved characters in a password remain literal; there is
-no manual URL escaping in that path. `DATABASE_PASSWORD` is also a `SecretStr`.
-
-Continue with [API usage](usage.md) or [testing](testing.md).
-
-For the offline Stage 02 workflow, run `uv run --locked python -m app.demo`.
-No Uvicorn or credentials are needed; see [domain usage](domain.md).
-
-For Stage 03 storage, create PostgreSQL databases, set `DATABASE_URL`, then run
-`uv run --locked alembic upgrade head` and
-`uv run --locked python -m app.persistence_demo`; see [persistence](persistence.md).
-
-For Stage 04 documents, run
-`uv run --locked python -m app.documents_cli write-samples var/samples` (no
-database needed), then `ingest`, `evidence` or `demo`; see
-[documents](documents.md).
-
-For Stage 05 reconciliation, run
-`uv run --locked python -m app.reconciliation_cli demo`; see
-[reconciliation](reconciliation.md).
-
-For Stage 06, create a fictional employee and token with
-`uv run --locked python -m app.users_cli create ...` and `token ...`, then call
-the API with `Authorization: Bearer ...`, or run
-`uv run --locked python -m app.decisions_demo`; see [decisions](decisions.md)
-and [API usage](usage.md).
-
-For Stage 07, run `uv run --locked python -m app.agent_demo` (offline, no model
-key); see [agent](agent.md).
-
-For Stage 08, install the interface with `uv sync --locked --group ui`, run
-`uv run --locked python -m app.ui_demo_setup`, start the API and then
-`uv run --locked --group ui python -m streamlit run ui/app.py`; see
-[interface](ui.md).
-
-For Stage 09, run `uv run --locked python -m app.outbox_demo` and
-`uv run --locked python -m app.evals run`, or start
-`python -m sandbox.receiver` and `python -m app.outbox_worker run` with the
-same `SANDBOX_WEBHOOK_SECRET`; see [outbox delivery](outbox.md) and
-[evaluations](evaluations.md).
-
-For Stage 10, set `POSTGRES_PASSWORD` and `SANDBOX_WEBHOOK_SECRET`, then run
-`docker compose up -d --build --wait` and
-`docker compose run --rm --no-deps api python -m app.smoke --api http://api:8003`;
-see [release](release.md). `python -m app.backup export | restore | verify |
-check` handles backups; see [backup](backup.md).
+Environment variables override `.env`, which overrides defaults; explicit
+`Settings(...)` arguments have the highest priority. Unknown `.env` keys are
+ignored. An explicit `DATABASE_URL` takes priority over the components.
+Compose supplies raw components so reserved characters in a password stay
+literal. Settings are cached; restart a process after changing them.
+`TEST_DATABASE_URL` is read only by the tests, never from `.env`; see
+[testing](testing.md).

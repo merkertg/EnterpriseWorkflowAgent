@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Дорожная карта](ROADMAP.md) ·
 [Проверка](VERIFICATION.md) ·
-[Краткая инструкция на английском](instructions/agent.md) ·
+[Краткая инструкция на английском](instructions/usage.md#review-agent) ·
 [ADR 0007](adr/0007-bounded-review-agent.md)
 
 ## 1. Что делает этот этап

@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Дорожная карта](ROADMAP.md) ·
 [Проверка](VERIFICATION.md) ·
-[Краткая инструкция на английском](instructions/ui.md) ·
+[Краткая инструкция на английском](instructions/usage.md#employee-page) ·
 [ADR 0008](adr/0008-streamlit-client-over-http.md)
 
 ## 1. Что делает этот этап

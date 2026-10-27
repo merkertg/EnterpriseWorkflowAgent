@@ -1,7 +1,7 @@
 # Этап 02. Предметная модель и правила процесса
 
 [README](../README.md) · [Дорожная карта](ROADMAP.md) ·
-[Проверка](VERIFICATION.md) · [Краткая инструкция на английском](instructions/domain.md)
+[Проверка](VERIFICATION.md) · [Краткая инструкция на английском](instructions/usage.md#domain-rules-and-workflow-states)
 
 ## 1. Что делает этот этап
 

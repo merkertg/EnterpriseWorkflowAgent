@@ -2,8 +2,8 @@
 
 [README](../README.md) · [Дорожная карта](ROADMAP.md) ·
 [Проверка](VERIFICATION.md) ·
-[Доставка outbox (англ.)](instructions/outbox.md) ·
-[Оценки (англ.)](instructions/evaluations.md) ·
+[Доставка outbox (англ.)](instructions/usage.md#outbox-delivery) ·
+[Оценки (англ.)](instructions/usage.md#evaluations) ·
 [ADR 0009](adr/0009-outbox-delivery-and-evaluations.md)
 
 ## 1. Что делает этот этап
